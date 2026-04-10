@@ -20,7 +20,7 @@ func handleConnection(conn net.Conn) {
 	//	return
 	//}
 	//if string(m) == "*1\\r\\n$4\\r\\nping\\r\\n" {
-	_, err := conn.Write([]byte("+PONG\\r\\n"))
+	_, err := conn.Write([]byte("PONG"))
 	if err != nil {
 		return
 	}
