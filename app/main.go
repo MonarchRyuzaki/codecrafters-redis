@@ -10,22 +10,6 @@ import (
 var _ = net.Listen
 var _ = os.Exit
 
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-	//reader := bufio.NewReader(conn)
-	//for {
-	//m, err := reader.ReadString('\n')
-	//if err != nil {
-	//	log.Println("Connection closed", err)
-	//	return
-	//}
-	//if string(m) == "*1\\r\\n$4\\r\\nping\\r\\n" {
-	conn.Write([]byte("+PONG\r\n"))
-
-	//}
-	//}
-}
-
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -42,5 +26,5 @@ func main() {
 		fmt.Println("Error accepting connection: ", err.Error())
 		os.Exit(1)
 	}
-	go handleConnection(conn)
+	conn.Write([]byte("+PONG\r\n"))
 }
