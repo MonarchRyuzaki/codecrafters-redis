@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"log"
 	"net"
 	"os"
 )
@@ -12,9 +10,9 @@ import (
 var _ = net.Listen
 var _ = os.Exit
 
-//func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn) {
 	defer conn.Close()
-	reader := bufio.NewReader(conn)
+	//reader := bufio.NewReader(conn)
 	//for {
 		//m, err := reader.ReadString('\n')
 		//if err != nil {
