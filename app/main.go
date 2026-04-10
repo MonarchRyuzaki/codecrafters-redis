@@ -14,18 +14,18 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 	//reader := bufio.NewReader(conn)
 	//for {
-		//m, err := reader.ReadString('\n')
-		//if err != nil {
-		//	log.Println("Connection closed", err)
-		//	return
-		//}
-		//if string(m) == "*1\\r\\n$4\\r\\nping\\r\\n" {
-			_, err := conn.Write([]byte("+PONG\\r\\n"))
-			if err != nil {
-				return
-			}
-		//}
+	//m, err := reader.ReadString('\n')
+	//if err != nil {
+	//	log.Println("Connection closed", err)
+	//	return
+	//}
+	//if string(m) == "*1\\r\\n$4\\r\\nping\\r\\n" {
+	_, err := conn.Write([]byte("+PONG\\r\\n"))
+	if err != nil {
+		return
 	}
+	//}
+	//}
 }
 
 func main() {
