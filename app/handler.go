@@ -41,7 +41,7 @@ func get(args []Value) Value {
 	val, ok := db.Get(key)
 
 	if !ok {
-		return Value{Type: BULK, Bulk: ""}
+		return Value{Type: BULK, Bulk: "$NULL$"}
 	}
 
 	return Value{Type: BULK, Bulk: val}
