@@ -13,5 +13,5 @@ func ping(args []Value) Value {
 }
 
 func echo(args []Value) Value {
-	return Value{Type: STRING, Str: args[0].Bulk}
+	return Value{Type: BULK, Bulk: args[0].Bulk}
 }
