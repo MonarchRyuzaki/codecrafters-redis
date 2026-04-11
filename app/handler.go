@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 var Handlers = map[string]func([]Value) Value{
 	"PING": ping,
@@ -29,15 +32,18 @@ func set(args []Value) Value {
 	value := args[1].Bulk
 	ttl := time.Duration(0)
 	isPermanent := false
-	if len(args) >= 4 && args[2].Bulk == "PX" && args[3].Num > 0 {
-		ttl = time.Duration(args[3].Num) * time.Millisecond
-		isPermanent = true
+	if len(args) >= 4 && args[2].Bulk == "PX" {
+		ms, err := strconv.Atoi(args[3].Bulk)
+		if err == nil && ms > 0 {
+			ttl = time.Duration(ms) * time.Millisecond
+			isPermanent = true
+		}
 	}
 
 	db.Set(key, MapValue{
-		Value:      value,
-		EntryTime:  time.Now(),
-		TimeToLive: time.Now().Add(ttl),
+		Value:       value,
+		EntryTime:   time.Now(),
+		ExitTime:    time.Now().Add(ttl),
 		IsPermanent: isPermanent,
 	})
 

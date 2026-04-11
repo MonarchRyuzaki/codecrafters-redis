@@ -6,5 +6,5 @@ type MapValue struct {
 	Value       string
 	EntryTime   time.Time
 	IsPermanent bool
-	TimeToLive  time.Time
+	ExitTime  time.Time
 }

@@ -28,7 +28,7 @@ func (db *DB) Get(key string) (MapValue, bool) {
 	db.mu.Lock()
 	val, ok := db.mmap[key]
 	db.mu.Unlock()
-	if !val.IsPermanent && time.Now().After(val.TimeToLive) {
+	if !val.IsPermanent && time.Now().After(val.ExitTime) {
 		delete(db.mmap, key)
 		val = MapValue{}
 		ok = false
@@ -42,7 +42,7 @@ func (db *DB) CleanupExpired() {
 
 	now := time.Now()
 	for key, val := range db.mmap {
-		if !val.IsPermanent && now.After(val.TimeToLive) {
+		if !val.IsPermanent && now.After(val.ExitTime) {
 			delete(db.mmap, key)
 		}
 	}
