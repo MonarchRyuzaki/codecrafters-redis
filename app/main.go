@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"strings"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -12,13 +14,41 @@ var _ = os.Exit
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
-	buf := make([]byte, 1024)
+
+	resp := NewResp(conn)
+	writer := NewWriter(conn)
+
 	for {
-		_, err := conn.Read(buf)
+		value, err := resp.Read()
 		if err != nil {
-			return
+			if err != io.EOF {
+				fmt.Println("Error reading from client: ", err.Error())
+			}
+			break
 		}
-		conn.Write([]byte("+PONG\r\n"))
+
+		if value.Type != ARRAY {
+			fmt.Println("Invalid request, expected array")
+			continue
+		}
+
+		if len(value.Array) == 0 {
+			fmt.Println("Invalid request, expected array length > 0")
+			continue
+		}
+
+		command := strings.ToUpper(value.Array[0].Bulk)
+		args := value.Array[1:]
+
+		handler, ok := Handlers[command]
+		if !ok {
+			fmt.Println("Unknown command: ", command)
+			writer.Write(Value{Type: ERROR, Str: "unknown command '" + command + "'"})
+			continue
+		}
+
+		result := handler(args)
+		writer.Write(result)
 	}
 }
 
