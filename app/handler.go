@@ -1,7 +1,5 @@
 package main
 
-import "fmt"
-
 var Handlers = map[string]func([]Value) Value{
 	"PING": ping,
 	"ECHO": echo,
