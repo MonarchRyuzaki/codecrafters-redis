@@ -31,12 +31,12 @@ func set(args []Value) Value {
 	key := args[0].Bulk
 	value := args[1].Bulk
 	ttl := time.Duration(0)
-	isPermanent := false
+	isPermanent := true
 	if len(args) >= 4 && args[2].Bulk == "PX" {
 		ms, err := strconv.Atoi(args[3].Bulk)
 		if err == nil && ms > 0 {
 			ttl = time.Duration(ms) * time.Millisecond
-			isPermanent = true
+			isPermanent = false
 		}
 	}
 
