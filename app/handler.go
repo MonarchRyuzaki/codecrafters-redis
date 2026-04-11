@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 var Handlers = map[string]func([]Value) Value{
 	"PING": ping,
 	"ECHO": echo,
@@ -25,8 +27,19 @@ func set(args []Value) Value {
 
 	key := args[0].Bulk
 	value := args[1].Bulk
+	ttl := time.Duration(0)
+	isPermanent := false
+	if len(args) >= 4 && args[2].Bulk == "PX" && args[3].Num > 0 {
+		ttl = time.Duration(args[3].Num) * time.Millisecond
+		isPermanent = true
+	}
 
-	db.Set(key, value)
+	db.Set(key, MapValue{
+		Value:      value,
+		EntryTime:  time.Now(),
+		TimeToLive: time.Now().Add(ttl),
+		IsPermanent: isPermanent,
+	})
 
 	return Value{Type: STRING, Str: "OK"}
 }
@@ -44,5 +57,5 @@ func get(args []Value) Value {
 		return Value{Type: BULK, Bulk: "$NULL$"}
 	}
 
-	return Value{Type: BULK, Bulk: val}
+	return Value{Type: BULK, Bulk: val.Value}
 }

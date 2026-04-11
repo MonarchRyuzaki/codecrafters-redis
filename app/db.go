@@ -1,30 +1,55 @@
 package main
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 type DB struct {
 	mu   sync.RWMutex
-	data map[string]string
+	mmap map[string]MapValue
 }
 
 func NewDB() *DB {
 	return &DB{
-		data: make(map[string]string),
+		mmap: make(map[string]MapValue),
 	}
 }
 
-
 var db = NewDB()
 
-func (db *DB) Set(key, value string) {
+func (db *DB) Set(key string, value MapValue) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	db.data[key] = value
+	db.mmap[key] = value
 }
 
-func (db *DB) Get(key string) (string, bool) {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-	val, ok := db.data[key]
+func (db *DB) Get(key string) (MapValue, bool) {
+	db.mu.Lock()
+	val, ok := db.mmap[key]
+	db.mu.Unlock()
+	if !val.IsPermanent && time.Now().After(val.TimeToLive) {
+		delete(db.mmap, key)
+		val = MapValue{}
+		ok = false
+	}
 	return val, ok
+}
+
+func (db *DB) CleanupExpired() {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	now := time.Now()
+	for key, val := range db.mmap {
+		if !val.IsPermanent && now.After(val.TimeToLive) {
+			delete(db.mmap, key)
+		}
+	}
+}
+
+func (db *DB) Erase(key string) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	delete(db.mmap, key)
 }

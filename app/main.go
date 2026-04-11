@@ -62,6 +62,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// All background processes
+	go handleActiveDeletion()
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
