@@ -10,6 +10,11 @@ import (
 var _ = net.Listen
 var _ = os.Exit
 
+func handleConnection(conn net.Conn) {
+	conn.Write([]byte("+PONG\r\n"))
+	conn.Write([]byte("+PONG\r\n"))
+}
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -26,5 +31,5 @@ func main() {
 		fmt.Println("Error accepting connection: ", err.Error())
 		os.Exit(1)
 	}
-	conn.Write([]byte("+PONG\r\n"))
+	go handleConnection(conn)
 }
