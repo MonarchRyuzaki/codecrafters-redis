@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 var Handlers = map[string]func([]Value) Value{
 	"PING": ping,
 	"ECHO": echo,
@@ -15,7 +17,7 @@ func ping(args []Value) Value {
 }
 
 func echo(args []Value) Value {
-	return Value{Type: BULK, Str: args[0].Bulk}
+	return Value{Type: BULK, Bulk: args[0].Bulk}
 }
 
 func set(args []Value) Value {
