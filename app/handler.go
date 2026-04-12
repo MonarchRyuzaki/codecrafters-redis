@@ -41,10 +41,13 @@ func set(args []Value) Value {
 	}
 
 	db.Set(key, MapValue{
-		Value:       value,
-		EntryTime:   time.Now(),
-		ExitTime:    time.Now().Add(ttl),
-		IsPermanent: isPermanent,
+		Type: SET,
+		Value: StringValue{
+			Value:       value,
+			EntryTime:   time.Now(),
+			ExitTime:    time.Now().Add(ttl),
+			IsPermanent: isPermanent,
+		},
 	})
 
 	return Value{Type: STRING, Str: "OK"}
@@ -63,5 +66,14 @@ func get(args []Value) Value {
 		return Value{Type: BULK, Bulk: "$NULL$"}
 	}
 
-	return Value{Type: BULK, Bulk: val.Value}
+	if val.Type != SET {
+		return Value{Type: ERROR, Str: "WRONGTYPE Operation against a key holding the wrong kind of value"}
+	}
+
+	sv, ok := val.Value.(StringValue)
+	if !ok {
+		return Value{Type: ERROR, Str: "ERR internal value type mismatch"}
+	}
+
+	return Value{Type: BULK, Bulk: sv.Value}
 }
