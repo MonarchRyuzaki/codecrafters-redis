@@ -6,10 +6,11 @@ import (
 )
 
 var Handlers = map[string]func([]Value) Value{
-	"PING": ping,
-	"ECHO": echo,
-	"SET":  set,
-	"GET":  get,
+	"PING":  ping,
+	"ECHO":  echo,
+	"SET":   set,
+	"GET":   get,
+	"RPUSH": rpush,
 }
 
 func ping(args []Value) Value {
@@ -76,4 +77,23 @@ func get(args []Value) Value {
 	}
 
 	return Value{Type: BULK, Bulk: sv.Value}
+}
+
+func rpush(args []Value) Value {
+	if len(args) < 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'get' command"}
+	}
+
+	key := args[0].Bulk
+	items := make([]string, 0, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		items = append(items, args[i].Bulk)
+	}
+
+	length, err := db.RPUSH(key, items)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: INTEGER, Num: length}
 }

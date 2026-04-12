@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
@@ -58,4 +59,28 @@ func (db *DB) Erase(key string) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	delete(db.mmap, key)
+}
+func (db *DB) RPUSH(key string, items []string) (int, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if val, ok := db.mmap[key]; ok && val.Type != LIST {
+		return -1, errors.New("ERR Existing Key is not a List")
+	}
+
+	var list []string
+	if val, ok := db.mmap[key]; ok && val.Type == LIST {
+		existingList, _ := val.Value.(ListValue)
+		list = append(existingList.Value, items...)
+	} else {
+		list = append([]string{}, items...)
+	}
+
+	db.mmap[key] = MapValue{
+		Type: LIST,
+		Value: ListValue{
+			Value: list,
+		},
+	}
+
+	return len(list), nil
 }
