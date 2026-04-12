@@ -114,9 +114,6 @@ func lrange(args []Value) Value {
 	if err != nil {
 		return Value{Type: ERROR, Str: fmt.Sprintf("ERR %s", err.Error())}
 	}
-	if start > end {
-		return Value{Type: ARRAY, Array: []Value{}}
-	}
 
 	items := db.LRANGE(key, start, end)
 
