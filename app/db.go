@@ -84,3 +84,21 @@ func (db *DB) RPUSH(key string, items []string) (int, error) {
 
 	return len(list), nil
 }
+
+func (db *DB) LRANGE(key string, start int, end int) []string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	if val, ok := db.mmap[key]; ok && val.Type != LIST {
+		return []string{}
+	}
+
+	var list []string
+	if val, ok := db.mmap[key]; ok && val.Type == LIST {
+		existingList, _ := val.Value.(ListValue)
+		if start < len(existingList.Value) {
+			list = existingList.Value[start:min(end, len(existingList.Value)-1)]
+		}
+	}
+
+	return list
+}

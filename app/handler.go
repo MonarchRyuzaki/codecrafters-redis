@@ -1,16 +1,18 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 )
 
 var Handlers = map[string]func([]Value) Value{
-	"PING":  ping,
-	"ECHO":  echo,
-	"SET":   set,
-	"GET":   get,
-	"RPUSH": rpush,
+	"PING":   ping,
+	"ECHO":   echo,
+	"SET":    set,
+	"GET":    get,
+	"RPUSH":  rpush,
+	"LRANGE": lrange,
 }
 
 func ping(args []Value) Value {
@@ -96,4 +98,35 @@ func rpush(args []Value) Value {
 	}
 
 	return Value{Type: INTEGER, Num: length}
+}
+
+func lrange(args []Value) Value {
+	if len(args) != 3 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments"}
+	}
+
+	key := args[0].Bulk
+	start, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return Value{Type: ERROR, Str: fmt.Sprintf("ERR %s", err.Error())}
+	}
+	end, err := strconv.Atoi(args[2].Bulk)
+	if err != nil {
+		return Value{Type: ERROR, Str: fmt.Sprintf("ERR %s", err.Error())}
+	}
+	if start > end {
+		return Value{Type: ARRAY, Array: []Value{}}
+	}
+
+	items := db.LRANGE(key, start, end)
+
+	var values []Value
+	for _, it := range items {
+		values = append(values, Value{
+			Type: STRING,
+			Str: it,
+		})
+	}
+
+	return Value{Type: ARRAY, Array: values}
 }
