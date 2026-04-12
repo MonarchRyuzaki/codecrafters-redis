@@ -123,8 +123,8 @@ func lrange(args []Value) Value {
 	var values []Value
 	for _, it := range items {
 		values = append(values, Value{
-			Type: STRING,
-			Str: it,
+			Type: BULK,
+			Bulk: it,
 		})
 	}
 
