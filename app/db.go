@@ -96,7 +96,7 @@ func (db *DB) LRANGE(key string, start int, end int) []string {
 	if val, ok := db.mmap[key]; ok && val.Type == LIST {
 		existingList, _ := val.Value.(ListValue)
 		if start < len(existingList.Value) {
-			list = existingList.Value[start:min(end, len(existingList.Value)-1)]
+			list = existingList.Value[start:min(end, len(existingList.Value)-1)+1]
 		}
 	}
 
