@@ -14,6 +14,7 @@ var Handlers = map[string]func([]Value) Value{
 	"RPUSH":  rpush,
 	"LRANGE": lrange,
 	"LPUSH":  lpush,
+	"LLEN":   llen,
 }
 
 func ping(args []Value) Value {
@@ -141,6 +142,21 @@ func lpush(args []Value) Value {
 	}
 
 	length, err := db.LPUSH(key, items)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: INTEGER, Num: length}
+}
+
+func llen(args []Value) Value {
+	if (len(args) != 1) {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'llen' command"}
+	}
+
+	key := args[0].Bulk
+
+	length, err := db.LLEN(key)
 	if err != nil {
 		return Value{Type: ERROR, Str: err.Error()}
 	}

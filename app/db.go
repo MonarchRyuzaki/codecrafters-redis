@@ -135,3 +135,19 @@ func (db *DB) LPUSH(key string, items []string) (int, error) {
 
 	return len(list), nil
 }
+
+func (db *DB) LLEN(key string) (int, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	if val, ok := db.mmap[key]; ok && val.Type != LIST {
+		return -1, errors.New("ERR Existing Key is not a List")
+	}
+
+	length := 0
+	if val, ok := db.mmap[key]; ok && val.Type == LIST {
+		existingList, _ := val.Value.(ListValue)
+		length = len(existingList.Value)
+	}
+
+	return length, nil
+}
