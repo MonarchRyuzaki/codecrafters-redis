@@ -85,7 +85,7 @@ func (w *Writer) marshalBulk(v Value) []byte {
 }
 
 func (w *Writer) marshalArray(v Value) []byte {
-	if v.Array[0].Bulk == "$NULL$" {
+	if len(v.Array) > 0 && v.Array[0].Bulk == "$NULL$" {
 		return []byte(fmt.Sprintf("*%d\r\n", -1))
 	}
 	var bytes []byte
