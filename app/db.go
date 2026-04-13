@@ -164,6 +164,11 @@ func (db *DB) LPOP(key string) (string, error) {
 		existingList, _ := val.Value.(ListValue)
 		item = existingList.Value[0]
 		existingList.Value = existingList.Value[1:]
+
+		db.mmap[key] = MapValue{
+			Type: LIST,
+			Value: existingList,
+		}
 	}
 
 	return item, nil
