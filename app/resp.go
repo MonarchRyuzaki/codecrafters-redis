@@ -79,12 +79,15 @@ func (w *Writer) marshalInt(v Value) []byte {
 
 func (w *Writer) marshalBulk(v Value) []byte {
 	if v.Bulk == "$NULL$" {
-		return []byte(fmt.Sprintf("$-1\r\n"))
+		return []byte(fmt.Sprintf("$d\r\n", -1))
 	}
 	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v.Bulk), v.Bulk))
 }
 
 func (w *Writer) marshalArray(v Value) []byte {
+	if v.Array == nil {
+		return []byte(fmt.Sprintf("*%d\r\n", -1))
+	}
 	var bytes []byte
 	bytes = append(bytes, []byte(fmt.Sprintf("*%d\r\n", len(v.Array)))...)
 
