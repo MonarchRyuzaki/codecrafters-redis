@@ -205,7 +205,7 @@ func blpop(args []Value) Value {
 	}
 
 	key := args[0].Bulk
-	timeout, err := strconv.Atoi(args[1].Bulk)
+	timeout, err := strconv.ParseFloat(args[1].Bulk, 64)
 	if err != nil {
 		return Value{Type: ERROR, Str: err.Error()}
 	}

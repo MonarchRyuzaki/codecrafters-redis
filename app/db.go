@@ -223,7 +223,7 @@ func (db *DB) LPOP(key string, cnt int) ([]string, error) {
 	return item, nil
 }
 
-func (db *DB) BLPOP(key string, timeout int) (string, bool) {
+func (db *DB) BLPOP(key string, timeout float64) (string, bool) {
 	db.mu.Lock()
 
 	// 1. Immediate check: if list exists and has items, pop and return immediately
