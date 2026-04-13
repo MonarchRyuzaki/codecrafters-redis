@@ -212,7 +212,9 @@ func blpop(args []Value) Value {
 
 	item, ok := db.BLPOP(key, timeout)
 	if !ok {
-		return Value{Type: ARRAY, Array: nil}
+		return Value{Type: ARRAY, Array: []Value{
+			{Type: BULK, Bulk: "$NULL$"},
+		}}
 	}
 
 	return Value{Type: ARRAY, Array: []Value{
