@@ -151,3 +151,20 @@ func (db *DB) LLEN(key string) (int, error) {
 
 	return length, nil
 }
+
+func (db *DB) LPOP(key string) (string, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if val, ok := db.mmap[key]; ok && val.Type != LIST {
+		return "", errors.New("ERR Existing Key is not a List")
+	}
+
+	item := ""
+	if val, ok := db.mmap[key]; ok && val.Type == LIST {
+		existingList, _ := val.Value.(ListValue)
+		item = existingList.Value[0]
+		existingList.Value = existingList.Value[1:]
+	}
+
+	return item, nil
+}

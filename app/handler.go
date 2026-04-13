@@ -15,6 +15,7 @@ var Handlers = map[string]func([]Value) Value{
 	"LRANGE": lrange,
 	"LPUSH":  lpush,
 	"LLEN":   llen,
+	"LPOP":	  lpop,
 }
 
 func ping(args []Value) Value {
@@ -162,4 +163,19 @@ func llen(args []Value) Value {
 	}
 
 	return Value{Type: INTEGER, Num: length}
+}
+
+func lpop(args []Value) Value {
+	if (len(args) != 1) {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'lpop' command"}
+	}
+
+	key := args[0].Bulk
+
+	item, err := db.LPOP(key)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: BULK, Bulk: item}
 }
