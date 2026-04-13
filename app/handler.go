@@ -184,6 +184,9 @@ func lpop(args []Value) Value {
 	if err != nil {
 		return Value{Type: ERROR, Str: err.Error()}
 	}
+	if (len(item) == 1) {
+		return Value{Type: BULK, Bulk: item[0]}
+	}
 	var values []Value
 	for _, it := range item {
 		values = append(values, Value{
