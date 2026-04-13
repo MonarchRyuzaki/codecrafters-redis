@@ -15,7 +15,7 @@ var Handlers = map[string]func([]Value) Value{
 	"LRANGE": lrange,
 	"LPUSH":  lpush,
 	"LLEN":   llen,
-	"LPOP":	  lpop,
+	"LPOP":   lpop,
 }
 
 func ping(args []Value) Value {
@@ -131,7 +131,7 @@ func lrange(args []Value) Value {
 	return Value{Type: ARRAY, Array: values}
 }
 
-func lpush(args []Value) Value { 
+func lpush(args []Value) Value {
 	if len(args) < 2 {
 		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'lpush' command"}
 	}
@@ -151,7 +151,7 @@ func lpush(args []Value) Value {
 }
 
 func llen(args []Value) Value {
-	if (len(args) != 1) {
+	if len(args) != 1 {
 		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'llen' command"}
 	}
 
@@ -166,16 +166,31 @@ func llen(args []Value) Value {
 }
 
 func lpop(args []Value) Value {
-	if (len(args) != 1) {
+	if len(args) > 2 {
 		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'lpop' command"}
 	}
 
 	key := args[0].Bulk
+	cnt := 1
+	if len(args) == 2 {
+		x, err := strconv.Atoi(args[1].Bulk)
+		if err != nil {
+			return Value{Type: ERROR, Str: err.Error()}
+		}
+		cnt = x
+	}
 
-	item, err := db.LPOP(key)
+	item, err := db.LPOP(key, cnt)
 	if err != nil {
 		return Value{Type: ERROR, Str: err.Error()}
 	}
+	var values []Value
+	for _, it := range item {
+		values = append(values, Value{
+			Type: BULK,
+			Bulk: it,
+		})
+	}
 
-	return Value{Type: BULK, Bulk: item}
+	return Value{Type: ARRAY, Array: values}
 }
