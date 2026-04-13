@@ -251,7 +251,7 @@ func (db *DB) BLPOP(key string, timeout float64) (string, bool) {
 	// 3. Block until value received or timeout
 	var timeoutChan <-chan time.Time
 	if timeout > 0 {
-		timer := time.NewTimer(time.Duration(timeout) * time.Second)
+		timer := time.NewTimer(time.Duration(timeout * float64(time.Second)))
 		defer timer.Stop()
 		timeoutChan = timer.C
 	}
