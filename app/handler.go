@@ -16,6 +16,7 @@ var Handlers = map[string]func([]Value) Value{
 	"LPUSH":  lpush,
 	"LLEN":   llen,
 	"LPOP":   lpop,
+	"BLPOP":  blpop,
 }
 
 func ping(args []Value) Value {
@@ -184,7 +185,7 @@ func lpop(args []Value) Value {
 	if err != nil {
 		return Value{Type: ERROR, Str: err.Error()}
 	}
-	if (len(item) == 1) {
+	if len(item) == 1 {
 		return Value{Type: BULK, Bulk: item[0]}
 	}
 	var values []Value
@@ -196,4 +197,26 @@ func lpop(args []Value) Value {
 	}
 
 	return Value{Type: ARRAY, Array: values}
+}
+
+func blpop(args []Value) Value {
+	if len(args) != 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'blpop' command"}
+	}
+
+	key := args[0].Bulk
+	timeout, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	item, ok := db.BLPOP(key, timeout)
+	if !ok {
+		return Value{Type: BULK, Bulk: "$NULL$"}
+	}
+
+	return Value{Type: ARRAY, Array: []Value{
+		{Type: BULK, Bulk: key},
+		{Type: BULK, Bulk: item},
+	}}
 }

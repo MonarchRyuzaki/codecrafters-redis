@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 const (
 	SET  = "SET"
@@ -23,3 +26,9 @@ type MapValue struct {
 	Value interface{}
 }
 
+type BlockingTicket struct {
+	// A channel that only RECEIVES a string (from the Pusher's perspective)
+	// or only SENDS a string (from the Waiter's perspective)
+	ValueChan chan string
+	Active    atomic.Int32
+}
