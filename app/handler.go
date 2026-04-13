@@ -13,6 +13,7 @@ var Handlers = map[string]func([]Value) Value{
 	"GET":    get,
 	"RPUSH":  rpush,
 	"LRANGE": lrange,
+	"LPUSH":  lpush,
 }
 
 func ping(args []Value) Value {
@@ -83,7 +84,7 @@ func get(args []Value) Value {
 
 func rpush(args []Value) Value {
 	if len(args) < 2 {
-		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'get' command"}
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'rpush' command"}
 	}
 
 	key := args[0].Bulk
@@ -102,7 +103,7 @@ func rpush(args []Value) Value {
 
 func lrange(args []Value) Value {
 	if len(args) != 3 {
-		return Value{Type: ERROR, Str: "ERR wrong number of arguments"}
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'lrange' command"}
 	}
 
 	key := args[0].Bulk
@@ -126,4 +127,23 @@ func lrange(args []Value) Value {
 	}
 
 	return Value{Type: ARRAY, Array: values}
+}
+
+func lpush(args []Value) Value { 
+	if len(args) < 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'lpush' command"}
+	}
+
+	key := args[0].Bulk
+	items := make([]string, 0, len(args)-1)
+	for i := len(args) - 1; i > 0; i-- {
+		items = append(items, args[i].Bulk)
+	}
+
+	length, err := db.LPUSH(key, items)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: INTEGER, Num: length}
 }

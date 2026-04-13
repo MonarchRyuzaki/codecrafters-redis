@@ -109,3 +109,29 @@ func (db *DB) LRANGE(key string, start int, end int) []string {
 
 	return list
 }
+
+func (db *DB) LPUSH(key string, items []string) (int, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if val, ok := db.mmap[key]; ok && val.Type != LIST {
+		return -1, errors.New("ERR Existing Key is not a List")
+	}
+
+	var list []string
+	if val, ok := db.mmap[key]; ok && val.Type == LIST {
+		existingList, _ := val.Value.(ListValue)
+		list = append([]string{}, items...)
+		list = append(list, existingList.Value...)
+	} else {
+		list = append([]string{}, items...)
+	}
+
+	db.mmap[key] = MapValue{
+		Type: LIST,
+		Value: ListValue{
+			Value: list,
+		},
+	}
+
+	return len(list), nil
+}
