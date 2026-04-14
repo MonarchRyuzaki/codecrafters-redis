@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,7 @@ var Handlers = map[string]func([]Value) Value{
 	"TYPE":   type_,
 	"XADD":   xadd,
 	"XRANGE": xrange,
+	"XREAD":  xread,
 }
 
 func ping(args []Value) Value {
@@ -296,4 +298,72 @@ func xrange(args []Value) Value {
 	}
 
 	return Value{Type: ARRAY, Array: arr}
+}
+
+func xread(args []Value) Value {
+	streamsIdx := -1
+	for i, arg := range args {
+		if strings.ToUpper(arg.Bulk) == "STREAMS" {
+			streamsIdx = i
+			break
+		}
+	}
+
+	if streamsIdx == -1 {
+		return Value{Type: ERROR, Str: "ERR syntax error"}
+	}
+
+	streamArgs := args[streamsIdx+1:]
+	if len(streamArgs)%2 != 0 {
+		return Value{Type: ERROR, Str: "ERR syntax error"}
+	}
+
+	n := len(streamArgs) / 2
+	keys := streamArgs[:n]
+	ids := streamArgs[n:]
+
+	var result []Value
+	for i := 0; i < n; i++ {
+		key := keys[i].Bulk
+		id := ids[i].Bulk
+
+		items, err := db.XReadStream(key, id)
+		if err != nil {
+			return Value{Type: ERROR, Str: err.Error()}
+		}
+
+		if len(items.Entries) == 0 {
+			continue
+		}
+
+		var entries []Value
+		for _, entry := range items.Entries {
+			var fields []Value
+			for k, v := range entry.Fields {
+				fields = append(fields, Value{Type: BULK, Bulk: k})
+				fields = append(fields, Value{Type: BULK, Bulk: v})
+			}
+			entries = append(entries, Value{
+				Type: ARRAY,
+				Array: []Value{
+					{Type: BULK, Bulk: entry.ID},
+					{Type: ARRAY, Array: fields},
+				},
+			})
+		}
+
+		result = append(result, Value{
+			Type: ARRAY,
+			Array: []Value{
+				{Type: BULK, Bulk: key},
+				{Type: ARRAY, Array: entries},
+			},
+		})
+	}
+
+	if len(result) == 0 {
+		return Value{Type: BULK, Bulk: "$NULL$"}
+	}
+
+	return Value{Type: ARRAY, Array: result}
 }
