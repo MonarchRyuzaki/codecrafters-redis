@@ -6,8 +6,9 @@ import (
 )
 
 const (
-	SET  = "string"
+	STRING_  = "string"
 	LIST = "list"
+	STREAM = "stream"
 )
 
 type StringValue struct {
@@ -31,4 +32,13 @@ type BlockingTicket struct {
 	// or only SENDS a string (from the Waiter's perspective)
 	ValueChan chan string
 	Active    atomic.Int32
+}
+
+type StreamEntry struct {
+	ID     string
+	Fields map[string]string
+}
+
+type StreamValue struct {
+	Entries []StreamEntry
 }

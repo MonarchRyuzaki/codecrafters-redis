@@ -18,6 +18,7 @@ var Handlers = map[string]func([]Value) Value{
 	"LPOP":   lpop,
 	"BLPOP":  blpop,
 	"TYPE":   type_,
+	"XADD":   xadd,
 }
 
 func ping(args []Value) Value {
@@ -49,7 +50,7 @@ func set(args []Value) Value {
 	}
 
 	db.Set(key, MapValue{
-		Type: SET,
+		Type: STRING_,
 		Value: StringValue{
 			Value:       value,
 			EntryTime:   time.Now(),
@@ -74,7 +75,7 @@ func get(args []Value) Value {
 		return Value{Type: BULK, Bulk: "$NULL$"}
 	}
 
-	if val.Type != SET {
+	if val.Type != STRING_ {
 		return Value{Type: ERROR, Str: "WRONGTYPE Operation against a key holding the wrong kind of value"}
 	}
 
@@ -236,4 +237,27 @@ func type_(args []Value) Value {
 		Type: STRING,
 		Str:  str,
 	}
+}
+
+func xadd(args []Value) Value {
+	if len(args) < 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'XADD' command"}
+	}
+
+	key := args[0].Bulk
+	streamValue := make(map[string]string)
+	id := args[1].Bulk
+	for i := 2; i < len(args); i += 2 {
+		if i+1 < len(args) {
+			streamValue[args[i].Bulk] = args[i+1].Bulk
+		}
+	}
+
+	returnedId, err := db.XADD(key, id, streamValue)
+
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: STRING, Str: returnedId}
 }

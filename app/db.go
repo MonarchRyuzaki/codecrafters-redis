@@ -2,6 +2,9 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -32,7 +35,7 @@ func (db *DB) Get(key string) (MapValue, bool) {
 	val, ok := db.mmap[key]
 	db.mu.Unlock()
 
-	if ok && val.Type == SET {
+	if ok && val.Type == STRING_ {
 		sv, oksv := val.Value.(StringValue)
 		if oksv && !sv.IsPermanent && time.Now().After(sv.ExitTime) {
 			db.Erase(key)
@@ -48,7 +51,7 @@ func (db *DB) CleanupExpired() {
 
 	now := time.Now()
 	for key, val := range db.mmap {
-		if val.Type == SET {
+		if val.Type == STRING_ {
 			sv, ok := val.Value.(StringValue)
 			if ok && !sv.IsPermanent && now.After(sv.ExitTime) {
 				delete(db.mmap, key)
@@ -279,3 +282,118 @@ func (db *DB) TYPE(key string) string {
 	}
 	return val.Type
 }
+
+func (db *DB) XADD(key string, id string, streamValue map[string]string) (string, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	var stream StreamValue
+	if val, ok := db.mmap[key]; ok {
+		if val.Type != STREAM {
+			return "", errors.New("ERR Existing Key is not a stream")
+		}
+		stream = val.Value.(StreamValue)
+	}
+
+	var lastID string
+	if len(stream.Entries) > 0 {
+		lastID = stream.Entries[len(stream.Entries)-1].ID
+	}
+
+	newID, err := generateAndValidateStreamID(id, lastID)
+	if err != nil {
+		return "", err
+	}
+
+	stream.Entries = append(stream.Entries, StreamEntry{
+		ID:     newID,
+		Fields: streamValue,
+	})
+
+	db.mmap[key] = MapValue{
+		Type:  STREAM,
+		Value: stream,
+	}
+
+	return newID, nil
+}
+
+func generateAndValidateStreamID(requestedID string, lastID string) (string, error) {
+	var lastMs, lastSeq int64
+	if lastID != "" {
+		parts := strings.Split(lastID, "-")
+		lastMs, _ = strconv.ParseInt(parts[0], 10, 64)
+		lastSeq, _ = strconv.ParseInt(parts[1], 10, 64)
+	}
+
+	var ms, seq int64
+	var err error
+
+	if requestedID == "*" {
+		ms = time.Now().UnixMilli()
+		if ms < lastMs {
+			ms = lastMs
+		}
+		if ms == lastMs {
+			seq = lastSeq + 1
+		} else {
+			if ms == 0 {
+				seq = 1
+			} else {
+				seq = 0
+			}
+		}
+		return fmt.Sprintf("%d-%d", ms, seq), nil
+	}
+
+	if strings.HasSuffix(requestedID, "-*") {
+		msPart := strings.TrimSuffix(requestedID, "-*")
+		ms, err = strconv.ParseInt(msPart, 10, 64)
+		if err != nil {
+			return "", errors.New("ERR invalid stream ID format")
+		}
+
+		if ms < lastMs {
+			return "", errors.New("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+		}
+
+		if ms == lastMs {
+			seq = lastSeq + 1
+		} else {
+			if ms == 0 {
+				seq = 1
+			} else {
+				seq = 0
+			}
+		}
+		return fmt.Sprintf("%d-%d", ms, seq), nil
+	}
+
+	parts := strings.Split(requestedID, "-")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", errors.New("ERR invalid stream ID format")
+	}
+
+	ms, err = strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return "", errors.New("ERR invalid stream ID format")
+	}
+	seq, err = strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return "", errors.New("ERR invalid stream ID format")
+	}
+
+	if ms == 0 && seq == 0 {
+		return "", errors.New("ERR The ID specified in XADD must be greater than 0-0")
+	}
+
+	if lastID != "" {
+		if ms < lastMs || (ms == lastMs && seq <= lastSeq) {
+			return "", errors.New("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+		}
+	}
+
+	return requestedID, nil
+}
+
+
