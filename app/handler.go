@@ -259,5 +259,5 @@ func xadd(args []Value) Value {
 		return Value{Type: ERROR, Str: err.Error()}
 	}
 
-	return Value{Type: STRING, Str: returnedId}
+	return Value{Type: BULK, Bulk: returnedId}
 }
