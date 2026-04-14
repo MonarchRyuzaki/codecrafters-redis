@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	SET  = "SET"
-	LIST = "LIST"
+	SET  = "string"
+	LIST = "list"
 )
 
 type StringValue struct {

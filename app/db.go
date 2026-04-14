@@ -269,3 +269,13 @@ func (db *DB) BLPOP(key string, timeout float64) (string, bool) {
 		return item, true
 	}
 }
+
+func (db *DB) TYPE(key string) string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	val, ok := db.mmap[key]
+	if !ok {
+		return "none"
+	}
+	return val.Type
+}

@@ -17,6 +17,7 @@ var Handlers = map[string]func([]Value) Value{
 	"LLEN":   llen,
 	"LPOP":   lpop,
 	"BLPOP":  blpop,
+	"TYPE":   type_,
 }
 
 func ping(args []Value) Value {
@@ -221,4 +222,18 @@ func blpop(args []Value) Value {
 		{Type: BULK, Bulk: key},
 		{Type: BULK, Bulk: item},
 	}}
+}
+
+func type_(args []Value) Value {
+	if len(args) != 1 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'TYPE' command"}
+	}
+
+	key := args[0].Bulk
+
+	str := db.TYPE(key)
+	return Value{
+		Type: STRING,
+		Str:  str,
+	}
 }
