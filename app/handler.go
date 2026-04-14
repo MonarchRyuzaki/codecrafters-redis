@@ -19,6 +19,7 @@ var Handlers = map[string]func([]Value) Value{
 	"BLPOP":  blpop,
 	"TYPE":   type_,
 	"XADD":   xadd,
+	"XRANGE": xrange,
 }
 
 func ping(args []Value) Value {
@@ -260,4 +261,39 @@ func xadd(args []Value) Value {
 	}
 
 	return Value{Type: BULK, Bulk: returnedId}
+}
+
+func xrange(args []Value) Value {
+	if len(args) != 3 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'XRANGE' command"}
+	}
+
+	key := args[0].Bulk
+	start := args[1].Bulk
+	end := args[2].Bulk
+
+	items, err := db.XRANGE(key, start, end)
+
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	arr := make([]Value, len(items.Entries))
+	for i, it := range items.Entries {
+		var tempVal []Value
+		for k, v := range it.Fields {
+			tempVal = append(tempVal, Value{Type: BULK, Bulk: k})
+			tempVal = append(tempVal, Value{Type: BULK, Bulk: v})
+		}
+		
+		arr[i] = Value{
+			Type: ARRAY,
+			Array: []Value{
+				{Type: BULK, Bulk: it.ID},
+				{Type: ARRAY, Array: tempVal},
+			},
+		}
+	}
+
+	return Value{Type: ARRAY, Array: arr}
 }

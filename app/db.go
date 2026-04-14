@@ -396,4 +396,66 @@ func generateAndValidateStreamID(requestedID string, lastID string) (string, err
 	return requestedID, nil
 }
 
+func (db *DB) XRANGE(key, start, end string) (StreamValue, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	val, ok := db.mmap[key]
+	if !ok {
+		return StreamValue{}, nil
+	}
+	if val.Type != STREAM {
+		return StreamValue{}, errors.New("ERR Existing Key is not a stream")
+	}
 
+	stream := val.Value.(StreamValue)
+	var result StreamValue
+
+	parseRangeID := func(id string) (int64, int64, error) {
+		if id == "-" {
+			return 0, 0, nil
+		}
+		if id == "+" {
+			// Using max int64 to represent the end of the stream
+			return 9223372036854775807, 9223372036854775807, nil
+		}
+		parts := strings.Split(id, "-")
+		ms, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return 0, 0, err
+		}
+		var seq int64
+		if len(parts) > 1 {
+			seq, err = strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				return 0, 0, err
+			}
+		} else {
+			seq = 0
+		}
+		return ms, seq, nil
+	}
+	startMs, startSeq, err := parseRangeID(start)
+	if err != nil {
+		return StreamValue{}, err
+	}
+	endMs, endSeq, err := parseRangeID(end, )
+	if err != nil {
+		return StreamValue{}, err
+	}
+
+	for _, entry := range stream.Entries {
+		parts := strings.Split(entry.ID, "-")
+		eMs, _ := strconv.ParseInt(parts[0], 10, 64)
+		eSeq, _ := strconv.ParseInt(parts[1], 10, 64)
+
+		if eMs < startMs || (eMs == startMs && eSeq < startSeq) {
+			continue
+		}
+		if eMs > endMs || (eMs == endMs && eSeq > endSeq) {
+			continue
+		}
+		result.Entries = append(result.Entries, entry)
+	}
+
+	return result, nil
+}
