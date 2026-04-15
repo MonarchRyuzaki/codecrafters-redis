@@ -473,11 +473,13 @@ func (db *DB) XRANGE(key, start, end string) (StreamValue, error) {
 }
 
 func (db *DB) XReadStream(key, lastID string, timeout int) (StreamValue, error) {
-	if lastID == "$" {
-		lastID = strconv.FormatInt(time.Now().UnixMilli(), 10) + "-0"
-	}
 	db.mu.RLock()
 	val, ok := db.mmap[key]
+	if ok && val.Type == STREAM {
+		if lastID == "$" {
+			lastID = val.Value.(StreamValue).Entries[len(val.Value.(StreamValue).Entries)-1].ID
+		}
+	}
 	db.mu.RUnlock()
 	if !ok {
 		return StreamValue{}, nil
