@@ -1,0 +1,1 @@
+./bench.sh $(lsof -t -i :6379)

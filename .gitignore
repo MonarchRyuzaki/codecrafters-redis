@@ -4,3 +4,6 @@ app/benchmark_results
 redis-server
 .idea
 .vscode
+*.log
+*.tmp
+__pycache__
