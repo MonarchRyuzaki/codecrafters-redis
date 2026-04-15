@@ -370,7 +370,9 @@ func xread(args []Value) Value {
 	}
 
 	if len(result) == 0 {
-		return Value{Type: BULK, Bulk: "$NULL$"}
+		return Value{Type: ARRAY, Array: []Value{
+			{Type: BULK, Bulk: "$NULL$"},
+		}}
 	}
 
 	return Value{Type: ARRAY, Array: result}
