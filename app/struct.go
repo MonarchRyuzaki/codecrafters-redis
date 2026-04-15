@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	STRING_  = "string"
-	LIST = "list"
-	STREAM = "stream"
+	STRING_ = "string"
+	LIST    = "list"
+	STREAM  = "stream"
 )
 
 type StringValue struct {
@@ -31,6 +31,12 @@ type BlockingTicket struct {
 	// A channel that only RECEIVES a string (from the Pusher's perspective)
 	// or only SENDS a string (from the Waiter's perspective)
 	ValueChan chan string
+	Active    atomic.Int32
+}
+
+type BlockingTicketStream struct {
+	LastID    string
+	ValueChan chan StreamEntry
 	Active    atomic.Int32
 }
 

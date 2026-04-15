@@ -10,15 +10,17 @@ import (
 )
 
 type DB struct {
-	mu              sync.RWMutex
-	mmap            map[string]MapValue
-	blockingClients map[string][]*BlockingTicket
+	mu                   sync.RWMutex
+	mmap                 map[string]MapValue
+	blockingClients      map[string][]*BlockingTicket
+	blockingClientStream map[string][]*BlockingTicketStream
 }
 
 func NewDB() *DB {
 	return &DB{
-		mmap:            make(map[string]MapValue),
-		blockingClients: make(map[string][]*BlockingTicket),
+		mmap:                 make(map[string]MapValue),
+		blockingClients:      make(map[string][]*BlockingTicket),
+		blockingClientStream: make(map[string][]*BlockingTicketStream),
 	}
 }
 
@@ -315,6 +317,15 @@ func (db *DB) XADD(key string, id string, streamValue map[string]string) (string
 		Value: stream,
 	}
 
+	for _, x := range db.blockingClientStream[key] {
+		if x.LastID > id {
+			continue
+		}
+		if x.Active.CompareAndSwap(0, 1) {
+			x.ValueChan <- stream.Entries[len(stream.Entries)-1]
+		}
+	}
+
 	return newID, nil
 }
 
@@ -461,10 +472,10 @@ func (db *DB) XRANGE(key, start, end string) (StreamValue, error) {
 	return result, nil
 }
 
-func (db *DB) XReadStream(key, lastID string) (StreamValue, error) {
+func (db *DB) XReadStream(key, lastID string, timeout int) (StreamValue, error) {
 	db.mu.RLock()
-	defer db.mu.RUnlock()
 	val, ok := db.mmap[key]
+	db.mu.RUnlock()
 	if !ok {
 		return StreamValue{}, nil
 	}
@@ -487,6 +498,36 @@ func (db *DB) XReadStream(key, lastID string) (StreamValue, error) {
 
 		if eMs > lastMs || (eMs == lastMs && eSeq > lastSeq) {
 			result.Entries = append(result.Entries, entry)
+		}
+	}
+
+	if len(result.Entries) == 0 && timeout >= 0 {
+		ticket := &BlockingTicketStream{
+			LastID:    lastID,
+			ValueChan: make(chan StreamEntry, 1),
+		}
+		db.mu.Lock()
+		db.blockingClientStream[key] = append(db.blockingClientStream[key], ticket)
+		db.mu.Unlock()
+
+		var timeoutChan <-chan time.Time
+		if timeout > 0 {
+			timer := time.NewTimer(time.Duration(timeout) * time.Millisecond)
+			defer timer.Stop()
+			timeoutChan = timer.C
+		}
+
+		for {
+			select {
+			case item := <-ticket.ValueChan:
+				return StreamValue{Entries: []StreamEntry{item}}, nil
+			case <-timeoutChan:
+				if ticket.Active.CompareAndSwap(0, 2) {
+					return StreamValue{}, nil
+				}
+				item := <-ticket.ValueChan
+				return StreamValue{Entries: []StreamEntry{item}}, nil
+			}
 		}
 	}
 

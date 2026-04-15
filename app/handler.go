@@ -308,6 +308,14 @@ func xread(args []Value) Value {
 			break
 		}
 	}
+	blockMs := -1
+	if (strings.ToUpper(args[0].Bulk) == "BLOCK") {
+		ms, err := strconv.Atoi(args[1].Bulk)
+		if err != nil {
+			return Value{Type: ERROR, Str: err.Error()}
+		}
+		blockMs = ms;
+	} 
 
 	if streamsIdx == -1 {
 		return Value{Type: ERROR, Str: "ERR syntax error"}
@@ -327,7 +335,7 @@ func xread(args []Value) Value {
 		key := keys[i].Bulk
 		id := ids[i].Bulk
 
-		items, err := db.XReadStream(key, id)
+		items, err := db.XReadStream(key, id, blockMs)
 		if err != nil {
 			return Value{Type: ERROR, Str: err.Error()}
 		}
