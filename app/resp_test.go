@@ -138,6 +138,13 @@ func TestWrite(t *testing.T) {
 			input: Value{Type: ARRAY, Array: []Value{}},
 			want:  "*0\r\n",
 		},
+		{
+			name: "Null Array",
+			input: Value{Type: ARRAY, Array: []Value{
+				{Type: BULK, Bulk: "$NULL$"},
+			}},
+			want: "*-1\r\n",
+		},
 	}
 
 	for _, tt := range tests {
