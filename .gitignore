@@ -1,1 +1,6 @@
 GEMINI.md
+usage.tmp
+app/benchmark_results
+redis-server
+.idea
+.vscode

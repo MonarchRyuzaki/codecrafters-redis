@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -134,8 +135,26 @@ func (r *Resp) Read() (Value, error) {
 	case INTEGER:
 		return r.readInt()
 	default:
-		fmt.Printf("Unknown type: %v", string(_type))
-		return Value{}, nil
+		// Not a standard RESP type. Let's treat it as an inline command.
+		err := r.reader.UnreadByte()
+		if err != nil {
+			return Value{}, err
+		}
+		
+		line, _, err := r.readLine()
+		if err != nil {
+			return Value{}, err
+		}
+		
+		parts := strings.Split(string(line), " ")
+		var array []Value
+		for _, part := range parts {
+			if part != "" {
+				array = append(array, Value{Type: BULK, Bulk: part})
+			}
+		}
+		
+		return Value{Type: ARRAY, Array: array}, nil
 	}
 }
 
