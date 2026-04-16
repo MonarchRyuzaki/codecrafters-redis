@@ -54,16 +54,37 @@ func handleExec(cs *ConnState, args []Value) Value {
 	}
 	if cs.tx.hasError {
 		*cs.tx = TxState{}
+		cs.watchState.state = make(map[string]WatchStateValue)
 		return Value{Type: ERROR, Str: "EXECABORT Transaction discarded because of previous errors."}
 	}
 
 	results := make([]Value, 0, len(cs.tx.queue))
 	for _, qcmd := range cs.tx.queue {
-		handler := Handlers[qcmd.name]
-		results = append(results, handler(qcmd.args))
+		var res Value
+		if qcmd.name == "GET" {
+			res = Handlers["GETWITHVERSION"](qcmd.args)
+			key := qcmd.args[0].Bulk
+			if watchVal, ok := cs.watchState.state[key]; ok {
+				if res.Type != ARRAY || len(res.Array) != 2 ||
+					res.Array[0].Bulk != watchVal.value ||
+					res.Array[1].Num != watchVal.version {
+					// Mismatch! Abort transaction.
+					*cs.tx = TxState{}
+					cs.watchState.state = make(map[string]WatchStateValue)
+					return Value{Type: ARRAY, Array: []Value{{Type: BULK, Bulk: "$NULL$"}}}
+				}
+			}
+			// Use only the bulk value for results
+			res = res.Array[0]
+		} else {
+			handler := Handlers[qcmd.name]
+			res = handler(qcmd.args)
+		}
+		results = append(results, res)
 	}
 
 	*cs.tx = TxState{}
+	cs.watchState.state = make(map[string]WatchStateValue)
 	return Value{Type: ARRAY, Array: results}
 }
 
@@ -72,6 +93,7 @@ func handleDiscard(cs *ConnState, args []Value) Value {
 		return Value{Type: ERROR, Str: "ERR DISCARD without MULTI"}
 	}
 	*cs.tx = TxState{}
+	cs.watchState.state = make(map[string]WatchStateValue)
 	return Value{Type: STRING, Str: "OK"}
 }
 
