@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -537,4 +538,53 @@ func (db *DB) XReadStream(key, lastID string, timeout int) (StreamValue, error) 
 	}
 
 	return result, nil
+}
+
+func (db *DB) INCR(key string) (int, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	val, ok := db.mmap[key]
+	if !ok {
+		atomicInt := &atomic.Int64{}
+		atomicInt.Store(1)
+		db.mmap[key] = MapValue{
+			Type: ATOMIC_INT,
+			Value: AtomicIntegerValue{
+				Value: atomicInt,
+			},
+		}
+		return 1, nil
+	}
+
+	if val.Type == ATOMIC_INT {
+		atomicVal, _ := val.Value.(AtomicIntegerValue)
+		newVal := atomicVal.Value.Add(1)
+		return int(newVal), nil
+	}
+
+	if val.Type != STRING_ {
+		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+
+	strValue, ok := val.Value.(StringValue)
+	if !ok {
+		return 0, errors.New("ERR value is not an integer or out of range")
+	}
+
+	ival, err := strconv.Atoi(strValue.Value)
+	if err != nil {
+		return 0, errors.New("ERR value is not an integer or out of range")
+	}
+
+	atomicInt := &atomic.Int64{}
+	atomicInt.Store(int64(ival + 1))
+	db.mmap[key] = MapValue{
+		Type: ATOMIC_INT,
+		Value: AtomicIntegerValue{
+			Value: atomicInt,
+		},
+	}
+
+	return ival + 1, nil
 }

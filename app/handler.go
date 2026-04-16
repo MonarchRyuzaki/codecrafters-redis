@@ -22,6 +22,7 @@ var Handlers = map[string]func([]Value) Value{
 	"XADD":   xadd,
 	"XRANGE": xrange,
 	"XREAD":  xread,
+	"INCR":   incr,
 }
 
 func ping(args []Value) Value {
@@ -76,6 +77,14 @@ func get(args []Value) Value {
 
 	if !ok {
 		return Value{Type: BULK, Bulk: "$NULL$"}
+	}
+
+	if val.Type == ATOMIC_INT {
+		av, ok := val.Value.(AtomicIntegerValue)
+		if !ok {
+			return Value{Type: ERROR, Str: "ERR internal value type mismatch"}
+		}
+		return Value{Type: BULK, Bulk: strconv.FormatInt(av.Value.Load(), 10)}
 	}
 
 	if val.Type != STRING_ {
@@ -287,7 +296,7 @@ func xrange(args []Value) Value {
 			tempVal = append(tempVal, Value{Type: BULK, Bulk: k})
 			tempVal = append(tempVal, Value{Type: BULK, Bulk: v})
 		}
-		
+
 		arr[i] = Value{
 			Type: ARRAY,
 			Array: []Value{
@@ -309,13 +318,13 @@ func xread(args []Value) Value {
 		}
 	}
 	blockMs := -1
-	if (strings.ToUpper(args[0].Bulk) == "BLOCK") {
+	if strings.ToUpper(args[0].Bulk) == "BLOCK" {
 		ms, err := strconv.Atoi(args[1].Bulk)
 		if err != nil {
 			return Value{Type: ERROR, Str: err.Error()}
 		}
-		blockMs = ms;
-	} 
+		blockMs = ms
+	}
 
 	if streamsIdx == -1 {
 		return Value{Type: ERROR, Str: "ERR syntax error"}
@@ -376,4 +385,19 @@ func xread(args []Value) Value {
 	}
 
 	return Value{Type: ARRAY, Array: result}
+}
+
+func incr(args []Value) Value {
+	if len(args) != 1 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'INCR' command"}
+	}
+
+	key := args[0].Bulk
+
+	val, err := db.INCR(key)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: INTEGER, Num: val}
 }

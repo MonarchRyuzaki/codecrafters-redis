@@ -9,6 +9,7 @@ const (
 	STRING_ = "string"
 	LIST    = "list"
 	STREAM  = "stream"
+	ATOMIC_INT = "a_int"
 )
 
 type StringValue struct {
@@ -16,6 +17,10 @@ type StringValue struct {
 	EntryTime   time.Time
 	IsPermanent bool
 	ExitTime    time.Time
+}
+
+type AtomicIntegerValue struct {
+	Value *atomic.Int64
 }
 
 type ListValue struct {
