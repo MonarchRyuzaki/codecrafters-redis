@@ -38,6 +38,7 @@ var ConnHandlers = map[string]func(*ConnState, []Value) Value{
 	"EXEC":    handleExec,
 	"DISCARD": handleDiscard,
 	"WATCH":   handleWatch,
+	"UNWATCH": handleUnwatch,
 }
 
 var noExecLockCommands = map[string]bool{
@@ -115,6 +116,14 @@ func handleWatch(cs *ConnState, args []Value) Value {
 		}
 	}
 
+	return Value{Type: STRING, Str: "OK"}
+}
+
+func handleUnwatch(cs *ConnState, args []Value) Value {
+	if (len(args) != 0) {
+		return Value{Type: ERROR, Str: "ERR Incorrect number of arguments for UNWATCH command"}
+	}
+	cs.watchState.state = make(map[string]WatchStateValue)
 	return Value{Type: STRING, Str: "OK"}
 }
 
