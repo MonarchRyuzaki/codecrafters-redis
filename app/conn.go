@@ -5,7 +5,6 @@ import (
 	"io"
 	"net"
 	"strings"
-	"sync"
 )
 
 type QueuedCmd struct {
@@ -105,23 +104,16 @@ func handleWatch(cs *ConnState, args []Value) Value {
 		return Value{Type: ERROR, Str: "ERR WATCH inside MULTI is not allowed"}
 	}
 
-	var wg sync.WaitGroup
-
 	for _, x := range args {
 		getHandler := Handlers["GETWITHVERSION"]
-		wg.Add(1)
-		go func(x Value) {
-			defer wg.Done()
-			res := getHandler([]Value{x})
-			if res.Type == ARRAY && len(res.Array) == 2 {
-				cs.watchState.state[x.Bulk] = WatchStateValue{
-					value:   res.Array[0].Bulk,
-					version: res.Array[1].Num,
-				}
+		res := getHandler([]Value{x})
+		if res.Type == ARRAY && len(res.Array) == 2 {
+			cs.watchState.state[x.Bulk] = WatchStateValue{
+				value:   res.Array[0].Bulk,
+				version: res.Array[1].Num,
 			}
-		}(x)
+		}
 	}
-	wg.Wait()
 
 	return Value{Type: STRING, Str: "OK"}
 }
