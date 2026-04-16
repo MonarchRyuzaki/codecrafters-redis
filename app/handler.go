@@ -8,21 +8,22 @@ import (
 )
 
 var Handlers = map[string]func([]Value) Value{
-	"PING":   ping,
-	"ECHO":   echo,
-	"SET":    set,
-	"GET":    get,
-	"RPUSH":  rpush,
-	"LRANGE": lrange,
-	"LPUSH":  lpush,
-	"LLEN":   llen,
-	"LPOP":   lpop,
-	"BLPOP":  blpop,
-	"TYPE":   type_,
-	"XADD":   xadd,
-	"XRANGE": xrange,
-	"XREAD":  xread,
-	"INCR":   incr,
+	"PING":           ping,
+	"ECHO":           echo,
+	"SET":            set,
+	"GET":            get,
+	"GETWITHVERSION": getWithVersion,
+	"RPUSH":          rpush,
+	"LRANGE":         lrange,
+	"LPUSH":          lpush,
+	"LLEN":           llen,
+	"LPOP":           lpop,
+	"BLPOP":          blpop,
+	"TYPE":           type_,
+	"XADD":           xadd,
+	"XRANGE":         xrange,
+	"XREAD":          xread,
+	"INCR":           incr,
 }
 
 func ping(args []Value) Value {
@@ -53,15 +54,7 @@ func set(args []Value) Value {
 		}
 	}
 
-	db.Set(key, MapValue{
-		Type: STRING_,
-		Value: StringValue{
-			Value:       value,
-			EntryTime:   time.Now(),
-			ExitTime:    time.Now().Add(ttl),
-			IsPermanent: isPermanent,
-		},
-	})
+	db.Set(key, value, ttl, isPermanent)
 
 	return Value{Type: STRING, Str: "OK"}
 }
@@ -400,4 +393,26 @@ func incr(args []Value) Value {
 	}
 
 	return Value{Type: INTEGER, Num: val}
+}
+
+func getWithVersion(args []Value) Value {
+	if len(args) < 1 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'getwithversion' command"}
+	}
+
+	key := args[0].Bulk
+
+	val, version, ok := db.GetWithVersion(key)
+
+	if !ok {
+		return Value{Type: ARRAY, Array: []Value{
+			{Type: BULK, Bulk: "$NULL$"},
+			{Type: INTEGER, Num: 0},
+		}}
+	}
+
+	return Value{Type: ARRAY, Array: []Value{
+		{Type: BULK, Bulk: val},
+		{Type: INTEGER, Num: version},
+	}}
 }

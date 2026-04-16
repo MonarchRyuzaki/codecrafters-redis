@@ -17,6 +17,7 @@ type StringValue struct {
 	EntryTime   time.Time
 	IsPermanent bool
 	ExitTime    time.Time
+	Version     int
 }
 
 type AtomicIntegerValue struct {

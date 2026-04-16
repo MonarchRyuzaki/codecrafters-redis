@@ -13,6 +13,7 @@ import (
 type DB struct {
 	mu                   sync.RWMutex
 	mmap                 map[string]MapValue
+	versions             map[string]int
 	blockingClients      map[string][]*BlockingTicket
 	blockingClientStream map[string][]*BlockingTicketStream
 }
@@ -27,10 +28,25 @@ func NewDB() *DB {
 
 var db = NewDB()
 
-func (db *DB) Set(key string, value MapValue) {
+func (db *DB) Set(key string, value string, ttl time.Duration, isPermanent bool) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	db.mmap[key] = value
+	val, ok := db.mmap[key]
+	newVersion := 1
+	strValue, _ := val.Value.(StringValue)
+	if ok {
+		newVersion = strValue.Version + 1
+	}
+	db.mmap[key] = MapValue{
+		Type: STRING_,
+		Value: StringValue{
+			Value: value,
+			EntryTime: time.Now(),
+			ExitTime: time.Now().Add(ttl),
+			IsPermanent: isPermanent,
+			Version: newVersion,
+		},
+	}
 }
 
 func (db *DB) Get(key string) (MapValue, bool) {
@@ -46,6 +62,34 @@ func (db *DB) Get(key string) (MapValue, bool) {
 		}
 	}
 	return val, ok
+}
+
+func (db *DB) GetWithVersion(key string) (string, int, bool) {
+	db.mu.Lock()
+	val, ok := db.mmap[key]
+	db.mu.Unlock()
+
+	if !ok {
+		return "", 0, false
+	}
+
+	if val.Type == STRING_ {
+		sv, oksv := val.Value.(StringValue)
+		if oksv && !sv.IsPermanent && time.Now().After(sv.ExitTime) {
+			db.Erase(key)
+			return "", 0, false
+		}
+		return sv.Value, sv.Version, true
+	}
+
+	if val.Type == ATOMIC_INT {
+		av, ok := val.Value.(AtomicIntegerValue)
+		if ok {
+			return strconv.FormatInt(av.Value.Load(), 10), 0, true
+		}
+	}
+
+	return "", 0, false
 }
 
 func (db *DB) CleanupExpired() {
