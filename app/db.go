@@ -12,8 +12,8 @@ import (
 
 type DB struct {
 	mu                   sync.RWMutex
+	execMu               sync.Mutex
 	mmap                 map[string]MapValue
-	versions             map[string]int
 	blockingClients      map[string][]*BlockingTicket
 	blockingClientStream map[string][]*BlockingTicketStream
 }
@@ -28,6 +28,12 @@ func NewDB() *DB {
 
 var db = NewDB()
 
+func (db *DB) WithExecLock(fn func()) {
+    db.execMu.Lock()
+    defer db.execMu.Unlock()
+    fn()
+}
+
 func (db *DB) Set(key string, value string, ttl time.Duration, isPermanent bool) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -40,13 +46,45 @@ func (db *DB) Set(key string, value string, ttl time.Duration, isPermanent bool)
 	db.mmap[key] = MapValue{
 		Type: STRING_,
 		Value: StringValue{
-			Value: value,
-			EntryTime: time.Now(),
-			ExitTime: time.Now().Add(ttl),
+			Value:       value,
+			EntryTime:   time.Now(),
+			ExitTime:    time.Now().Add(ttl),
 			IsPermanent: isPermanent,
-			Version: newVersion,
+			Version:     newVersion,
 		},
 	}
+}
+
+func (db *DB) SetWithVersion(key string, value string, version int, ttl time.Duration, isPermanent bool) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	val, ok := db.mmap[key]
+	currentVersion := 0
+	if ok {
+		if val.Type != STRING_ {
+			return errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+		}
+		sv := val.Value.(StringValue)
+		currentVersion = sv.Version
+	}
+
+	if currentVersion != version {
+		return fmt.Errorf("version mismatch: expected %d, got %d", version, currentVersion)
+	}
+
+	newVersion := currentVersion + 1
+	db.mmap[key] = MapValue{
+		Type: STRING_,
+		Value: StringValue{
+			Value:       value,
+			EntryTime:   time.Now(),
+			ExitTime:    time.Now().Add(ttl),
+			IsPermanent: isPermanent,
+			Version:     newVersion,
+		},
+	}
+	return nil
 }
 
 func (db *DB) Get(key string) (MapValue, bool) {

@@ -11,6 +11,7 @@ var Handlers = map[string]func([]Value) Value{
 	"PING":           ping,
 	"ECHO":           echo,
 	"SET":            set,
+	"SETWITHVERSION": setWithVersion,
 	"GET":            get,
 	"GETWITHVERSION": getWithVersion,
 	"RPUSH":          rpush,
@@ -55,6 +56,36 @@ func set(args []Value) Value {
 	}
 
 	db.Set(key, value, ttl, isPermanent)
+
+	return Value{Type: STRING, Str: "OK"}
+}
+
+func setWithVersion(args []Value) Value {
+	if len(args) < 3 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'setwithversion' command"}
+	}
+
+	key := args[0].Bulk
+	value := args[1].Bulk
+	version, err := strconv.Atoi(args[2].Bulk)
+	if err != nil {
+		return Value{Type: ERROR, Str: "ERR invalid version"}
+	}
+
+	ttl := time.Duration(0)
+	isPermanent := true
+	if len(args) >= 5 && args[3].Bulk == "PX" {
+		ms, err := strconv.Atoi(args[4].Bulk)
+		if err == nil && ms > 0 {
+			ttl = time.Duration(ms) * time.Millisecond
+			isPermanent = false
+		}
+	}
+
+	err = db.SetWithVersion(key, value, version, ttl, isPermanent)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
 
 	return Value{Type: STRING, Str: "OK"}
 }

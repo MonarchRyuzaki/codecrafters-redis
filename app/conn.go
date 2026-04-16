@@ -17,6 +17,7 @@ type TxState struct {
 	active   bool
 	queue    []QueuedCmd
 	hasError bool
+	isDirty  bool
 }
 
 type WatchState struct {
@@ -40,6 +41,11 @@ var ConnHandlers = map[string]func(*ConnState, []Value) Value{
 	"WATCH":   handleWatch,
 }
 
+var noExecLockCommands = map[string]bool{
+	"BLPOP": true,
+	"XREAD": true,
+}
+
 func handleMulti(cs *ConnState, args []Value) Value {
 	if cs.tx.active {
 		return Value{Type: ERROR, Str: "ERR MULTI calls can not be nested"}
@@ -58,28 +64,24 @@ func handleExec(cs *ConnState, args []Value) Value {
 		return Value{Type: ERROR, Str: "EXECABORT Transaction discarded because of previous errors."}
 	}
 
+	db.execMu.Lock()
+	defer db.execMu.Unlock()
+
+	for key, watchVal := range cs.watchState.state {
+		res := Handlers["GETWITHVERSION"]([]Value{{Type: BULK, Bulk: key}})
+		if res.Type != ARRAY || len(res.Array) != 2 ||
+			res.Array[0].Bulk != watchVal.value ||
+			res.Array[1].Num != watchVal.version {
+			*cs.tx = TxState{}
+			cs.watchState.state = make(map[string]WatchStateValue)
+			return Value{Type: ARRAY, Array: []Value{{Type: BULK, Bulk: "$NULL$"}}}
+		}
+	}
+
 	results := make([]Value, 0, len(cs.tx.queue))
 	for _, qcmd := range cs.tx.queue {
-		var res Value
-		if qcmd.name == "GET" {
-			res = Handlers["GETWITHVERSION"](qcmd.args)
-			key := qcmd.args[0].Bulk
-			if watchVal, ok := cs.watchState.state[key]; ok {
-				if res.Type != ARRAY || len(res.Array) != 2 ||
-					res.Array[0].Bulk != watchVal.value ||
-					res.Array[1].Num != watchVal.version {
-					// Mismatch! Abort transaction.
-					*cs.tx = TxState{}
-					cs.watchState.state = make(map[string]WatchStateValue)
-					return Value{Type: ARRAY, Array: []Value{{Type: BULK, Bulk: "$NULL$"}}}
-				}
-			}
-			// Use only the bulk value for results
-			res = res.Array[0]
-		} else {
-			handler := Handlers[qcmd.name]
-			res = handler(qcmd.args)
-		}
+		handler := Handlers[qcmd.name]
+		res := handler(qcmd.args)
 		results = append(results, res)
 	}
 
@@ -175,6 +177,14 @@ func handleConnection(conn net.Conn) {
 			writer.Write(Value{Type: ERROR, Str: "ERR unknown command '" + command + "'"})
 			continue
 		}
-		writer.Write(handler(args))
+		if noExecLockCommands[command] {
+			writer.Write(handler(args))
+		} else {
+			var result Value
+			db.WithExecLock(func() {
+				result = handler(args)
+			})
+			writer.Write(result)
+		}
 	}
 }
