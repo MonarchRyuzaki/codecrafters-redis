@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 )
 
 type QueuedCmd struct {
@@ -18,44 +19,82 @@ type TxState struct {
 	hasError bool
 }
 
-var ConnHandlers = map[string]func(*TxState, []Value) Value{
+type WatchState struct {
+	state map[string]WatchStateValue
+}
+
+type WatchStateValue struct {
+	value   string
+	version int
+}
+
+type ConnState struct {
+	watchState *WatchState
+	tx         *TxState
+}
+
+var ConnHandlers = map[string]func(*ConnState, []Value) Value{
 	"MULTI":   handleMulti,
 	"EXEC":    handleExec,
 	"DISCARD": handleDiscard,
+	"WATCH":   handleWatch,
 }
 
-func handleMulti(tx *TxState, args []Value) Value {
-	if tx.active {
+func handleMulti(cs *ConnState, args []Value) Value {
+	if cs.tx.active {
 		return Value{Type: ERROR, Str: "ERR MULTI calls can not be nested"}
 	}
-	tx.active = true
+	cs.tx.active = true
 	return Value{Type: STRING, Str: "OK"}
 }
 
-func handleExec(tx *TxState, args []Value) Value {
-	if !tx.active {
+func handleExec(cs *ConnState, args []Value) Value {
+	if !cs.tx.active {
 		return Value{Type: ERROR, Str: "ERR EXEC without MULTI"}
 	}
-	if tx.hasError {
-		*tx = TxState{}
+	if cs.tx.hasError {
+		*cs.tx = TxState{}
 		return Value{Type: ERROR, Str: "EXECABORT Transaction discarded because of previous errors."}
 	}
 
-	results := make([]Value, 0, len(tx.queue))
-	for _, qcmd := range tx.queue {
-		handler := Handlers[qcmd.name] 
+	results := make([]Value, 0, len(cs.tx.queue))
+	for _, qcmd := range cs.tx.queue {
+		handler := Handlers[qcmd.name]
 		results = append(results, handler(qcmd.args))
 	}
 
-	*tx = TxState{}
+	*cs.tx = TxState{}
 	return Value{Type: ARRAY, Array: results}
 }
 
-func handleDiscard(tx *TxState, args []Value) Value {
-	if !tx.active {
+func handleDiscard(cs *ConnState, args []Value) Value {
+	if !cs.tx.active {
 		return Value{Type: ERROR, Str: "ERR DISCARD without MULTI"}
 	}
-	*tx = TxState{}
+	*cs.tx = TxState{}
+	return Value{Type: STRING, Str: "OK"}
+}
+
+func handleWatch(cs *ConnState, args []Value) Value {
+
+	var wg sync.WaitGroup
+
+	for _, x := range args {
+		getHandler := Handlers["GETWITHVERSION"]
+		wg.Add(1)
+		go func(x Value) {
+			defer wg.Done()
+			res := getHandler([]Value{x})
+			if res.Type == ARRAY && len(res.Array) == 2 {
+				cs.watchState.state[x.Bulk] = WatchStateValue{
+					value:   res.Array[0].Bulk,
+					version: res.Array[1].Num,
+				}
+			}
+		}(x)
+	}
+	wg.Wait()
+
 	return Value{Type: STRING, Str: "OK"}
 }
 
@@ -64,7 +103,12 @@ func handleConnection(conn net.Conn) {
 
 	resp := NewResp(conn)
 	writer := NewWriter(conn)
-	var tx TxState
+	connState := &ConnState{
+		watchState: &WatchState{
+			state: make(map[string]WatchStateValue),
+		},
+		tx: &TxState{},
+	}
 
 	for {
 		value, err := resp.Read()
@@ -84,16 +128,16 @@ func handleConnection(conn net.Conn) {
 		args := value.Array[1:]
 
 		if connHandler, ok := ConnHandlers[command]; ok {
-			writer.Write(connHandler(&tx, args))
+			writer.Write(connHandler(connState, args))
 			continue
 		}
 
-		if tx.active {
+		if connState.tx.active {
 			if _, ok := Handlers[command]; !ok {
-				tx.hasError = true
+				connState.tx.hasError = true
 				writer.Write(Value{Type: ERROR, Str: "ERR unknown command '" + command + "'"})
 			} else {
-				tx.queue = append(tx.queue, QueuedCmd{command, args})
+				connState.tx.queue = append(connState.tx.queue, QueuedCmd{command, args})
 				writer.Write(Value{Type: STRING, Str: "QUEUED"})
 			}
 			continue
