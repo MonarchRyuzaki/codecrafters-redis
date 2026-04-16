@@ -77,6 +77,10 @@ func handleDiscard(cs *ConnState, args []Value) Value {
 
 func handleWatch(cs *ConnState, args []Value) Value {
 
+	if cs.tx.active {
+		return Value{Type: ERROR, Str: "ERR WATCH inside MULTI is not allowed"}
+	}
+
 	var wg sync.WaitGroup
 
 	for _, x := range args {
