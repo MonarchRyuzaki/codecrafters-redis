@@ -121,6 +121,13 @@ func handleWait(s *ServerInfo, conn net.Conn, args []Value, resp *Resp, writer *
 
 	targetOffset := s.master_repl_offset.Load()
 
+	if targetOffset == 0 {
+		s.mu.Lock()
+		count := len(s.replicaInfo)
+		s.mu.Unlock()
+		return Value{Type: INTEGER, Num: count}
+	}
+
 	s.propagateCh <- []Value{
 		{Type: BULK, Bulk: "REPLCONF"},
 		{Type: BULK, Bulk: "GETACK"},
@@ -134,7 +141,7 @@ func handleWait(s *ServerInfo, conn net.Conn, args []Value, resp *Resp, writer *
 		s.mu.Lock()
 		ackCount := 0
 		for _, replica := range s.replicaInfo {
-			if targetOffset == 0 || replica.offset >= targetOffset {
+			if replica.offset >= targetOffset {
 				ackCount++
 			}
 		}
