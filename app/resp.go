@@ -26,12 +26,36 @@ type Value struct {
 	Array []Value
 }
 
+type CountingReader struct {
+	reader io.Reader
+	offset int64
+}
+
+func (r *CountingReader) Read(p []byte) (n int, err error) {
+	n, err = r.reader.Read(p)
+	r.offset += int64(n)
+	return n, err
+}
+
 type Resp struct {
 	reader *bufio.Reader
+	cr     *CountingReader
 }
 
 func NewResp(rd io.Reader) *Resp {
-	return &Resp{reader: bufio.NewReader(rd)}
+	cr := &CountingReader{reader: rd}
+	return &Resp{
+		reader: bufio.NewReader(cr),
+		cr:     cr,
+	}
+}
+
+func (r *Resp) BytesRead() int64 {
+	// bufio.Reader might have buffered some bytes that haven't been "consumed" by our high-level Read calls.
+	// But in Redis replication, the offset is usually calculated based on the bytes consumed from the stream.
+	// However, bufio.Buffered() tells us how many bytes are currently in the buffer.
+	// The number of bytes actually "read" by the application is cr.offset - r.reader.Buffered()
+	return r.cr.offset - int64(r.reader.Buffered())
 }
 
 type Writer struct {

@@ -9,12 +9,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 type ServerInfo struct {
 	role               string
 	master_replid      string
-	master_repl_offset int
+	master_repl_offset atomic.Int64
 	master_host        string
 	master_port        string
 	self_port          string
@@ -34,7 +35,7 @@ var serverInfo = ServerInfo{}
 func NewServerInfo(role string, host, masterPort string, selfPort string) *ServerInfo {
 	serverInfo.role = role
 	serverInfo.master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
-	serverInfo.master_repl_offset = 0
+	serverInfo.master_repl_offset.Store(0)
 	serverInfo.master_host = host
 	serverInfo.master_port = masterPort
 	serverInfo.self_port = selfPort
@@ -53,7 +54,7 @@ var ServerHandler = map[string]func(*ServerInfo, net.Conn, []Value) Value{
 }
 
 func handleInfo(s *ServerInfo, conn net.Conn, args []Value) Value {
-	return Value{Type: BULK, Bulk: fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%v", s.role, s.master_replid, s.master_repl_offset)}
+	return Value{Type: BULK, Bulk: fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%v", s.role, s.master_replid, s.master_repl_offset.Load())}
 }
 
 func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
@@ -88,7 +89,7 @@ func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
 			Array: []Value{
 				{Type: BULK, Bulk: "REPLCONF"},
 				{Type: BULK, Bulk: "ACK"},
-				{Type: BULK, Bulk: "0"},
+				{Type: BULK, Bulk: strconv.FormatInt(s.master_repl_offset.Load(), 10)},
 			},
 		}
 	}
@@ -109,7 +110,7 @@ func handlePsync(s *ServerInfo, conn net.Conn, args []Value) Value {
 			Array: []Value{
 				{
 					Type: STRING,
-					Str:  fmt.Sprintf("FULLRESYNC %s %v", s.master_replid, s.master_repl_offset),
+					Str:  fmt.Sprintf("FULLRESYNC %s %v", s.master_replid, s.master_repl_offset.Load()),
 				},
 				{
 					Type: RDB_FILE,

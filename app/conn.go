@@ -187,7 +187,11 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 	}
 
 	for {
+		offsetBefore := resp.BytesRead()
 		value, err := resp.Read()
+		offsetAfter := resp.BytesRead()
+		bytesRead := offsetAfter - offsetBefore
+
 		if err != nil {
 			if err != io.EOF {
 				fmt.Println("Error reading from client: ", err.Error())
@@ -197,6 +201,9 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 
 		if value.Type != ARRAY || len(value.Array) == 0 {
 			fmt.Println("Invalid request")
+			if isMasterStream {
+				serverInfo.master_repl_offset.Add(bytesRead)
+			}
 			continue
 		}
 
@@ -227,35 +234,40 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 
 		if servInfoHandler, ok := ServerHandler[command]; ok {
 			res := servInfoHandler(&serverInfo, conn, args)
-
-			isGetAck := command == "REPLCONF" && len(args) > 0 && strings.ToUpper(args[0].Bulk) == "GETACK"
-
-			if !isMasterStream || isGetAck {
+			// For master stream, we respond to REPLCONF GETACK
+			if isMasterStream && command == "REPLCONF" && len(args) > 0 && strings.ToUpper(args[0].Bulk) == "GETACK" {
+				writer.Write(res)
+			} else if !isMasterStream {
 				writer.Write(res)
 			}
-			continue
+		} else {
+			handler, ok := Handlers[command]
+			if !ok {
+				fmt.Println("Unknown command: ", command)
+				if !isMasterStream {
+					writer.Write(Value{Type: ERROR, Str: "ERR unknown command '" + command + "'"})
+				}
+			} else {
+				if noExecLockCommands[command] {
+					if !isMasterStream {
+						writer.Write(handler(args))
+					} else {
+						handler(args)
+					}
+				} else {
+					var result Value
+					db.WithExecLock(func() {
+						result = handler(args)
+					})
+					if !isMasterStream {
+						writer.Write(result)
+					}
+				}
+			}
 		}
 
-		handler, ok := Handlers[command]
-		if !ok {
-			fmt.Println("Unknown command: ", command)
-			if !isMasterStream {
-				writer.Write(Value{Type: ERROR, Str: "ERR unknown command '" + command + "'"})
-			}
-			continue
-		}
-		if noExecLockCommands[command] {
-			if !isMasterStream {
-				writer.Write(handler(args))
-			}
-		} else {
-			var result Value
-			db.WithExecLock(func() {
-				result = handler(args)
-			})
-			if !isMasterStream {
-				writer.Write(result)
-			}
+		if isMasterStream {
+			serverInfo.master_repl_offset.Add(bytesRead)
 		}
 
 		if serverInfo.role == "master" && writeCommands[command] {
