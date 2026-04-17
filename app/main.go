@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -20,12 +21,18 @@ func main() {
 	fmt.Println("Logs from your program will appear here!")
 
 	role := "master"
+	host, masterPort := "", ""
 
 	if len(*replicaof) != 0 {
 		role = "slave"
+		parts := strings.Split(*replicaof, " ")
+		if len(parts) >= 2 {
+			host, masterPort = parts[0], parts[1]
+		}
 	}
 
-	NewServerInfo(role)
+	s := NewServerInfo(role, host, masterPort)
+	s.performReplicationHandshake()
 
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", *port))
 	if err != nil {
