@@ -17,9 +17,11 @@ type ServerInfo struct {
 	self_port          string
 	replicaInfo        map[string]*ReplicaInfo
 	mu                 sync.Mutex
+	propagateCh        chan []Value
 }
 
 type ReplicaInfo struct {
+	conn        net.Conn
 	replicaPort string
 	replicaCapa []string
 }
@@ -34,6 +36,10 @@ func NewServerInfo(role string, host, masterPort string, selfPort string) *Serve
 	serverInfo.master_port = masterPort
 	serverInfo.self_port = selfPort
 	serverInfo.replicaInfo = make(map[string]*ReplicaInfo)
+	serverInfo.propagateCh = make(chan []Value, 100)
+
+	go serverInfo.broadcaster()
+
 	return &serverInfo
 }
 
@@ -55,6 +61,7 @@ func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
 	if _, exists := s.replicaInfo[connId]; !exists {
 		s.replicaInfo[connId] = &ReplicaInfo{
 			replicaCapa: []string{},
+			conn:        conn,
 		}
 	}
 
@@ -102,7 +109,7 @@ func handlePsync(s *ServerInfo, conn net.Conn, args []Value) Value {
 	return Value{}
 }
 
-func (s *ServerInfo) performReplicationHandshake() {
+func (s *ServerInfo) startReplicator() {
 	if s.role == "master" {
 		return
 	}
@@ -117,9 +124,13 @@ func (s *ServerInfo) performReplicationHandshake() {
 	}
 	defer conn.Close()
 
+	s.performReplicationHandshake(conn)
+	handleConnection(conn, true)
+}
+
+func (s *ServerInfo) performReplicationHandshake(conn net.Conn) {
 	reader := NewResp(conn)
 	writer := NewWriter(conn)
-
 	writer.Write(Value{Type: ARRAY, Array: []Value{
 		{
 			Type: BULK,
@@ -175,4 +186,19 @@ func (s *ServerInfo) performReplicationHandshake() {
 		},
 	}})
 	reader.Read()
+}
+
+func (s *ServerInfo) broadcaster() {
+	for cmdArgs := range s.propagateCh {
+		val := Value{Type: ARRAY, Array: cmdArgs}
+
+		s.mu.Lock()
+		for _, replica := range s.replicaInfo {
+			if replica.conn != nil {
+				writer := NewWriter(replica.conn)
+				writer.Write(val)
+			}
+		}
+		s.mu.Unlock()
+	}
 }

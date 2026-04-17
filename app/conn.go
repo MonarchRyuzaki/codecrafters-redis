@@ -41,6 +41,18 @@ var ConnHandlers = map[string]func(*ConnState, []Value) Value{
 	"UNWATCH": handleUnwatch,
 }
 
+var writeCommands = map[string]bool{
+	"SET": true,
+	"DEL": true,
+	"SETWITHVERSION": true,
+	"RPUSH": true,
+	"LPUSH": true,
+	"LPOP": true,
+	"BLPOP": true,
+	"XADD": true,
+	"INCR": true,
+}
+
 var noExecLockCommands = map[string]bool{
 	"BLPOP": true,
 	"XREAD": true,
@@ -84,10 +96,42 @@ func handleExec(cs *ConnState, args []Value) Value {
 		res := handler(qcmd.args)
 		results = append(results, res)
 	}
-
+	queueToPropagate := cs.tx.queue
 	*cs.tx = TxState{}
 	cs.watchState.state = make(map[string]WatchStateValue)
+
+	go propagateTransaction(queueToPropagate)
+
 	return Value{Type: ARRAY, Array: results}
+}
+
+func propagateTransaction(queue []QueuedCmd) {
+	if serverInfo.role != "master" {
+		return
+	}
+
+	hasWrite := false
+	for _, cmd := range queue {
+		if writeCommands[cmd.name] {
+			hasWrite = true
+			break
+		}
+	}
+
+	if !hasWrite {
+		return
+	}
+
+	serverInfo.propagateCh <- []Value{{Type: BULK, Bulk: "MULTI"}}
+
+	for _, cmd := range queue {
+		if writeCommands[cmd.name] {
+			fullCmd := append([]Value{{Type: BULK, Bulk: cmd.name}}, cmd.args...)
+			serverInfo.propagateCh <- fullCmd
+		}
+	}
+
+	serverInfo.propagateCh <- []Value{{Type: BULK, Bulk: "EXEC"}}
 }
 
 func handleDiscard(cs *ConnState, args []Value) Value {
@@ -127,7 +171,7 @@ func handleUnwatch(cs *ConnState, args []Value) Value {
 	return Value{Type: STRING, Str: "OK"}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, isMasterStream bool) {
 	defer conn.Close()
 	defer func() {
 		serverInfo.mu.Lock()
@@ -162,23 +206,31 @@ func handleConnection(conn net.Conn) {
 		args := value.Array[1:]
 
 		if connHandler, ok := ConnHandlers[command]; ok {
-			writer.Write(connHandler(connState, args))
+			if !isMasterStream {
+				writer.Write(connHandler(connState, args))
+			}
 			continue
 		}
 
 		if connState.tx.active {
 			if _, ok := Handlers[command]; !ok {
 				connState.tx.hasError = true
-				writer.Write(Value{Type: ERROR, Str: "ERR unknown command '" + command + "'"})
+				if !isMasterStream {
+					writer.Write(Value{Type: ERROR, Str: "ERR unknown command '" + command + "'"})
+				}
 			} else {
 				connState.tx.queue = append(connState.tx.queue, QueuedCmd{command, args})
-				writer.Write(Value{Type: STRING, Str: "QUEUED"})
+				if !isMasterStream {
+					writer.Write(Value{Type: STRING, Str: "QUEUED"})
+				}
 			}
 			continue
 		}
 
 		if servInfoHandler, ok := ServerHandler[command]; ok {
-			writer.Write(servInfoHandler(&serverInfo, conn, args))
+			if !isMasterStream {
+				writer.Write(servInfoHandler(&serverInfo, conn, args))
+			}
 			continue
 		}
 
@@ -189,13 +241,22 @@ func handleConnection(conn net.Conn) {
 			continue
 		}
 		if noExecLockCommands[command] {
-			writer.Write(handler(args))
+			if !isMasterStream {
+				writer.Write(handler(args))
+			}
 		} else {
 			var result Value
 			db.WithExecLock(func() {
 				result = handler(args)
 			})
-			writer.Write(result)
+			if !isMasterStream {
+				writer.Write(result)
+			}
+		}
+
+		if serverInfo.role == "master" && writeCommands[command] {
+			fullCmd := append([]Value{{Type: BULK, Bulk: command}}, args...)
+			serverInfo.propagateCh <- fullCmd
 		}
 	}
 }

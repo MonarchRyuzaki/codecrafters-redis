@@ -32,7 +32,7 @@ func main() {
 	}
 
 	s := NewServerInfo(role, host, masterPort, *port)
-	go s.performReplicationHandshake()
+	go s.startReplicator()
 
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", *port))
 	if err != nil {
@@ -49,6 +49,6 @@ func main() {
 			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
-		go handleConnection(conn)
+		go handleConnection(conn, false)
 	}
 }
