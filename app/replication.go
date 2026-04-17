@@ -30,6 +30,8 @@ type ReplicaInfo struct {
 	replicaPort string
 	replicaCapa []string
 	offset      int64
+	writer      *Writer
+	reader      *Resp
 }
 
 var serverInfo = ServerInfo{}
@@ -49,18 +51,18 @@ func NewServerInfo(role string, host, masterPort string, selfPort string) *Serve
 	return &serverInfo
 }
 
-var ServerHandler = map[string]func(*ServerInfo, net.Conn, []Value) Value{
+var ServerHandler = map[string]func(*ServerInfo, net.Conn, []Value, *Resp, *Writer) Value{
 	"INFO":     handleInfo,
 	"REPLCONF": handleReplConf,
 	"PSYNC":    handlePsync,
 	"WAIT":     handleWait,
 }
 
-func handleInfo(s *ServerInfo, conn net.Conn, args []Value) Value {
+func handleInfo(s *ServerInfo, conn net.Conn, args []Value, resp *Resp, writer *Writer) Value {
 	return Value{Type: BULK, Bulk: fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%v", s.role, s.master_replid, s.master_repl_offset.Load())}
 }
 
-func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
+func handleReplConf(s *ServerInfo, conn net.Conn, args []Value, resp *Resp, writer *Writer) Value {
 	connId := conn.RemoteAddr().String()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -69,6 +71,8 @@ func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
 		s.replicaInfo[connId] = &ReplicaInfo{
 			replicaCapa: []string{},
 			conn:        conn,
+			reader:      resp,
+			writer:      writer,
 		}
 	}
 
@@ -107,7 +111,7 @@ func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
 	return Value{Type: STRING, Str: "OK"}
 }
 
-func handleWait(s *ServerInfo, conn net.Conn, args []Value) Value {
+func handleWait(s *ServerInfo, conn net.Conn, args []Value, resp *Resp, writer *Writer) Value {
 	if len(args) != 2 {
 		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'wait' command"}
 	}
@@ -115,24 +119,13 @@ func handleWait(s *ServerInfo, conn net.Conn, args []Value) Value {
 	expectedReplicas, _ := strconv.Atoi(args[0].Bulk)
 	timeoutMs, _ := strconv.Atoi(args[1].Bulk)
 
-	val := Value{
-		Type: ARRAY,
-		Array: []Value{
-			{Type: BULK, Bulk: "REPLCONF"},
-			{Type: BULK, Bulk: "GETACK"},
-			{Type: BULK, Bulk: "*"},
-		},
-	}
-
-	s.mu.Lock()
 	targetOffset := s.master_repl_offset.Load()
-	for _, replica := range s.replicaInfo {
-		if replica.conn != nil {
-			writer := NewWriter(replica.conn)
-			writer.Write(val)
-		}
+
+	s.propagateCh <- []Value{
+		{Type: BULK, Bulk: "REPLCONF"},
+		{Type: BULK, Bulk: "GETACK"},
+		{Type: BULK, Bulk: "*"},
 	}
-	s.mu.Unlock()
 
 	timeout := time.Duration(timeoutMs) * time.Millisecond
 	startTime := time.Now()
@@ -155,7 +148,7 @@ func handleWait(s *ServerInfo, conn net.Conn, args []Value) Value {
 	}
 }
 
-func handlePsync(s *ServerInfo, conn net.Conn, args []Value) Value {
+func handlePsync(s *ServerInfo, conn net.Conn, args []Value, resp *Resp, writer *Writer) Value {
 	if len(args) < 2 {
 		return Value{Type: ERROR, Str: "Invalid Arguments for 'PSYNC' command"}
 	}
@@ -274,13 +267,12 @@ func (s *ServerInfo) broadcaster() {
 		w := &Writer{}
 		bytes := w.marshalValue(val)
 		offsetInc := int64(len(bytes))
-
-		s.mu.Lock()
 		s.master_repl_offset.Add(offsetInc)
+		
+		s.mu.Lock()
 		for _, replica := range s.replicaInfo {
-			if replica.conn != nil {
-				writer := NewWriter(replica.conn)
-				writer.Write(val)
+			if replica.conn != nil && replica.writer != nil {
+				replica.writer.Write(val)
 			}
 		}
 		s.mu.Unlock()

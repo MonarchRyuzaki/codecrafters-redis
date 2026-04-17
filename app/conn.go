@@ -233,7 +233,7 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 		}
 
 		if servInfoHandler, ok := ServerHandler[command]; ok {
-			res := servInfoHandler(&serverInfo, conn, args)
+			res := servInfoHandler(&serverInfo, conn, args, resp, writer)
 			// For master stream, we respond to REPLCONF GETACK
 			if isMasterStream && command == "REPLCONF" && len(args) > 0 && strings.ToUpper(args[0].Bulk) == "GETACK" {
 				writer.Write(res)
