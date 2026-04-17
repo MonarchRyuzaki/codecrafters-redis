@@ -32,7 +32,7 @@ func main() {
 	}
 
 	s := NewServerInfo(role, host, masterPort, *port)
-	s.performReplicationHandshake()
+	go s.performReplicationHandshake()
 
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", *port))
 	if err != nil {

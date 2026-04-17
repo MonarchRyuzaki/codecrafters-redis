@@ -39,6 +39,7 @@ func NewServerInfo(role string, host, masterPort string, selfPort string) *Serve
 var ServerHandler = map[string]func(*ServerInfo, net.Conn, []Value) Value{
 	"INFO":     handleInfo,
 	"REPLCONF": handleReplConf,
+	"PSYNC":    handlePsync,
 }
 
 func handleInfo(s *ServerInfo, conn net.Conn, args []Value) Value {
@@ -73,6 +74,16 @@ func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
 	}
 
 	return Value{Type: STRING, Str: "OK"}
+}
+
+func handlePsync(s *ServerInfo, conn net.Conn, args []Value) Value {
+	if len(args) < 2 {
+		return Value{Type: ERROR, Str: "Invalid Arguments for 'PSYNC' command"}
+	}
+	if args[0].Bulk == "?" && args[1].Bulk == "-1" {
+		return Value{Type: STRING, Str: fmt.Sprintf("FULLRESYNC %s %v", s.master_replid, s.master_repl_offset)}
+	}
+	return Value{}
 }
 
 func (s *ServerInfo) performReplicationHandshake() {
@@ -129,6 +140,22 @@ func (s *ServerInfo) performReplicationHandshake() {
 		{
 			Type: BULK,
 			Bulk: "psync2",
+		},
+	}})
+	reader.Read()
+
+	writer.Write(Value{Type: ARRAY, Array: []Value{
+		{
+			Type: BULK,
+			Bulk: "PSYNC",
+		},
+		{
+			Type: BULK,
+			Bulk: "?",
+		},
+		{
+			Type: BULK,
+			Bulk: "-1",
 		},
 	}})
 	reader.Read()
