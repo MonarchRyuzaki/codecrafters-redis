@@ -14,11 +14,18 @@ var _ = os.Exit
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	port := flag.String("port", "6379", "Port to bind the server to")
+	replicaof := flag.String("replicaof", "", "master server to connect to")
 	flag.Parse()
 
 	fmt.Println("Logs from your program will appear here!")
 
-	NewServerInfo("master")
+	role := "master"
+
+	if len(*replicaof) != 0 {
+		role = "slave"
+	}
+
+	NewServerInfo(role)
 
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", *port))
 	if err != nil {
