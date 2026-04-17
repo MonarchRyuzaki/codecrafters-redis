@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type ServerInfo struct {
@@ -28,6 +29,7 @@ type ReplicaInfo struct {
 	conn        net.Conn
 	replicaPort string
 	replicaCapa []string
+	offset      int64
 }
 
 var serverInfo = ServerInfo{}
@@ -51,6 +53,7 @@ var ServerHandler = map[string]func(*ServerInfo, net.Conn, []Value) Value{
 	"INFO":     handleInfo,
 	"REPLCONF": handleReplConf,
 	"PSYNC":    handlePsync,
+	"WAIT":     handleWait,
 }
 
 func handleInfo(s *ServerInfo, conn net.Conn, args []Value) Value {
@@ -92,9 +95,64 @@ func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
 				{Type: BULK, Bulk: strconv.FormatInt(s.master_repl_offset.Load(), 10)},
 			},
 		}
+	case "ACK":
+		if len(args) < 2 {
+			return Value{Type: ERROR, Str: "Invalid Arguments for 'ReplConf' command"}
+		}
+		offset, _ := strconv.ParseInt(args[1].Bulk, 10, 64)
+		s.replicaInfo[connId].offset = offset
+		return Value{}
 	}
 
 	return Value{Type: STRING, Str: "OK"}
+}
+
+func handleWait(s *ServerInfo, conn net.Conn, args []Value) Value {
+	if len(args) != 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'wait' command"}
+	}
+
+	expectedReplicas, _ := strconv.Atoi(args[0].Bulk)
+	timeoutMs, _ := strconv.Atoi(args[1].Bulk)
+
+	val := Value{
+		Type: ARRAY,
+		Array: []Value{
+			{Type: BULK, Bulk: "REPLCONF"},
+			{Type: BULK, Bulk: "GETACK"},
+			{Type: BULK, Bulk: "*"},
+		},
+	}
+
+	s.mu.Lock()
+	targetOffset := s.master_repl_offset.Load()
+	for _, replica := range s.replicaInfo {
+		if replica.conn != nil {
+			writer := NewWriter(replica.conn)
+			writer.Write(val)
+		}
+	}
+	s.mu.Unlock()
+
+	timeout := time.Duration(timeoutMs) * time.Millisecond
+	startTime := time.Now()
+
+	for {
+		s.mu.Lock()
+		ackCount := 0
+		for _, replica := range s.replicaInfo {
+			if targetOffset == 0 || replica.offset >= targetOffset {
+				ackCount++
+			}
+		}
+		s.mu.Unlock()
+
+		if ackCount >= expectedReplicas || (timeoutMs > 0 && time.Since(startTime) >= timeout) {
+			return Value{Type: INTEGER, Num: ackCount}
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func handlePsync(s *ServerInfo, conn net.Conn, args []Value) Value {
@@ -213,7 +271,12 @@ func (s *ServerInfo) broadcaster() {
 	for cmdArgs := range s.propagateCh {
 		val := Value{Type: ARRAY, Array: cmdArgs}
 
+		w := &Writer{}
+		bytes := w.marshalValue(val)
+		offsetInc := int64(len(bytes))
+
 		s.mu.Lock()
+		s.master_repl_offset.Add(offsetInc)
 		for _, replica := range s.replicaInfo {
 			if replica.conn != nil {
 				writer := NewWriter(replica.conn)
