@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -68,19 +69,28 @@ func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
 	}
 
 	//TODO: Since the s.replicaInfo is stateful, we need to also check when a conn drops so we can delete the key
-
-	switch args[0].Bulk {
-	case "listening-port":
+	subCommand := strings.ToUpper(args[0].Bulk)
+	switch subCommand {
+	case "LISTENING-PORT":
 		if len(args) != 2 {
 			return Value{Type: ERROR, Str: "Invalid Arguments for 'ReplConf' command"}
 		}
 		s.replicaInfo[connId].replicaPort = args[1].Bulk
 
-	case "capa":
+	case "CAPA":
 		if len(args) < 2 {
 			return Value{Type: ERROR, Str: "Invalid Arguments for 'ReplConf' command"}
 		}
 		s.replicaInfo[connId].replicaCapa = append(s.replicaInfo[connId].replicaCapa, args[1].Bulk)
+	case "GETACK":
+		return Value{
+			Type: ARRAY,
+			Array: []Value{
+				{Type: BULK, Bulk: "REPLCONF"},
+				{Type: BULK, Bulk: "ACK"},
+				{Type: BULK, Bulk: "0"},
+			},
+		}
 	}
 
 	return Value{Type: STRING, Str: "OK"}

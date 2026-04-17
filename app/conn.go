@@ -42,15 +42,15 @@ var ConnHandlers = map[string]func(*ConnState, []Value) Value{
 }
 
 var writeCommands = map[string]bool{
-	"SET": true,
-	"DEL": true,
+	"SET":            true,
+	"DEL":            true,
 	"SETWITHVERSION": true,
-	"RPUSH": true,
-	"LPUSH": true,
-	"LPOP": true,
-	"BLPOP": true,
-	"XADD": true,
-	"INCR": true,
+	"RPUSH":          true,
+	"LPUSH":          true,
+	"LPOP":           true,
+	"BLPOP":          true,
+	"XADD":           true,
+	"INCR":           true,
 }
 
 var noExecLockCommands = map[string]bool{
@@ -226,8 +226,12 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 		}
 
 		if servInfoHandler, ok := ServerHandler[command]; ok {
-			if !isMasterStream {
-				writer.Write(servInfoHandler(&serverInfo, conn, args))
+			res := servInfoHandler(&serverInfo, conn, args)
+
+			isGetAck := command == "REPLCONF" && len(args) > 0 && strings.ToUpper(args[0].Bulk) == "GETACK"
+
+			if !isMasterStream || isGetAck {
+				writer.Write(res)
 			}
 			continue
 		}
