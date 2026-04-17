@@ -9,11 +9,13 @@ import (
 )
 
 const (
-	STRING  = '+'
-	ERROR   = '-'
-	INTEGER = ':'
-	BULK    = '$'
-	ARRAY   = '*'
+	STRING   = '+'
+	ERROR    = '-'
+	INTEGER  = ':'
+	BULK     = '$'
+	ARRAY    = '*'
+	RDB_FILE = 'R'
+	STREAMS  = 'S'
 )
 
 type Value struct {
@@ -41,6 +43,14 @@ func NewWriter(w io.Writer) *Writer {
 }
 
 func (w *Writer) Write(v Value) error {
+	if v.Type == STREAMS {
+		for _, val := range v.Array {
+			if err := w.Write(val); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	var bytes []byte
 
 	switch v.Type {
@@ -54,6 +64,8 @@ func (w *Writer) Write(v Value) error {
 		bytes = w.marshalBulk(v)
 	case ARRAY:
 		bytes = w.marshalArray(v)
+	case RDB_FILE:
+		bytes = w.marshalRDB(v)
 	default:
 		return fmt.Errorf("unknown type: %v", v.Type)
 	}
@@ -99,6 +111,11 @@ func (w *Writer) marshalArray(v Value) []byte {
 	return bytes
 }
 
+func (w *Writer) marshalRDB(v Value) []byte {
+	header := fmt.Sprintf("$%d\r\n", len(v.Bulk))
+	return append([]byte(header), []byte(v.Bulk)...)
+}
+
 func (w *Writer) marshalValue(v Value) []byte {
 	switch v.Type {
 	case STRING:
@@ -109,6 +126,8 @@ func (w *Writer) marshalValue(v Value) []byte {
 		return w.marshalInt(v)
 	case BULK:
 		return w.marshalBulk(v)
+	case RDB_FILE:
+		return w.marshalRDB(v)
 	case ARRAY:
 		return w.marshalArray(v)
 	default:
@@ -140,12 +159,12 @@ func (r *Resp) Read() (Value, error) {
 		if err != nil {
 			return Value{}, err
 		}
-		
+
 		line, _, err := r.readLine()
 		if err != nil {
 			return Value{}, err
 		}
-		
+
 		parts := strings.Split(string(line), " ")
 		var array []Value
 		for _, part := range parts {
@@ -153,7 +172,7 @@ func (r *Resp) Read() (Value, error) {
 				array = append(array, Value{Type: BULK, Bulk: part})
 			}
 		}
-		
+
 		return Value{Type: ARRAY, Array: array}, nil
 	}
 }

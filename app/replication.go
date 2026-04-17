@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -81,7 +82,22 @@ func handlePsync(s *ServerInfo, conn net.Conn, args []Value) Value {
 		return Value{Type: ERROR, Str: "Invalid Arguments for 'PSYNC' command"}
 	}
 	if args[0].Bulk == "?" && args[1].Bulk == "-1" {
-		return Value{Type: STRING, Str: fmt.Sprintf("FULLRESYNC %s %v", s.master_replid, s.master_repl_offset)}
+		emptyRDBHex := "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
+		rdbBytes, _ := hex.DecodeString(emptyRDBHex)
+
+		return Value{
+			Type: STREAMS,
+			Array: []Value{
+				{
+					Type: STRING,
+					Str:  fmt.Sprintf("FULLRESYNC %s %v", s.master_replid, s.master_repl_offset),
+				},
+				{
+					Type: RDB_FILE,
+					Bulk: string(rdbBytes),
+				},
+			},
+		}
 	}
 	return Value{}
 }
