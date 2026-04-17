@@ -172,6 +172,11 @@ func handleConnection(conn net.Conn) {
 			continue
 		}
 
+		if servInfoHandler, ok := ServerHandler[command]; ok {
+			writer.Write(servInfoHandler(&serverInfo, args))
+			continue
+		}
+
 		handler, ok := Handlers[command]
 		if !ok {
 			fmt.Println("Unknown command: ", command)
