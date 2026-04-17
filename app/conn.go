@@ -171,7 +171,7 @@ func handleUnwatch(cs *ConnState, args []Value) Value {
 	return Value{Type: STRING, Str: "OK"}
 }
 
-func handleConnection(conn net.Conn, isMasterStream bool) {
+func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Writer) {
 	defer conn.Close()
 	defer func() {
 		serverInfo.mu.Lock()
@@ -179,8 +179,6 @@ func handleConnection(conn net.Conn, isMasterStream bool) {
 		serverInfo.mu.Unlock()
 	}()
 
-	resp := NewResp(conn)
-	writer := NewWriter(conn)
 	connState := &ConnState{
 		watchState: &WatchState{
 			state: make(map[string]WatchStateValue),
@@ -237,7 +235,9 @@ func handleConnection(conn net.Conn, isMasterStream bool) {
 		handler, ok := Handlers[command]
 		if !ok {
 			fmt.Println("Unknown command: ", command)
-			writer.Write(Value{Type: ERROR, Str: "ERR unknown command '" + command + "'"})
+			if !isMasterStream {
+				writer.Write(Value{Type: ERROR, Str: "ERR unknown command '" + command + "'"})
+			}
 			continue
 		}
 		if noExecLockCommands[command] {

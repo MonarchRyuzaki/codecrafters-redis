@@ -244,7 +244,10 @@ func (r *Resp) readBulk() (Value, error) {
 
 	bulk := make([]byte, len)
 
-	r.reader.Read(bulk)
+	_, err = io.ReadFull(r.reader, bulk)
+	if err != nil {
+		return v, err
+	}
 
 	v.Bulk = string(bulk)
 

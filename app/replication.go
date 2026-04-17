@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 )
 
@@ -124,20 +126,21 @@ func (s *ServerInfo) startReplicator() {
 	}
 	defer conn.Close()
 
-	s.performReplicationHandshake(conn)
-	handleConnection(conn, true)
+	resp := NewResp(conn)
+	writer := NewWriter(conn)
+
+	s.performReplicationHandshake(conn, resp, writer)
+	handleConnection(conn, true, resp, writer)
 }
 
-func (s *ServerInfo) performReplicationHandshake(conn net.Conn) {
-	reader := NewResp(conn)
-	writer := NewWriter(conn)
+func (s *ServerInfo) performReplicationHandshake(conn net.Conn, resp *Resp, writer *Writer) {
 	writer.Write(Value{Type: ARRAY, Array: []Value{
 		{
 			Type: BULK,
 			Bulk: "PING",
 		},
 	}})
-	reader.Read()
+	resp.Read()
 
 	writer.Write(Value{Type: ARRAY, Array: []Value{
 		{
@@ -153,7 +156,7 @@ func (s *ServerInfo) performReplicationHandshake(conn net.Conn) {
 			Bulk: s.self_port,
 		},
 	}})
-	reader.Read()
+	resp.Read()
 
 	writer.Write(Value{Type: ARRAY, Array: []Value{
 		{
@@ -169,7 +172,7 @@ func (s *ServerInfo) performReplicationHandshake(conn net.Conn) {
 			Bulk: "psync2",
 		},
 	}})
-	reader.Read()
+	resp.Read()
 
 	writer.Write(Value{Type: ARRAY, Array: []Value{
 		{
@@ -185,7 +188,14 @@ func (s *ServerInfo) performReplicationHandshake(conn net.Conn) {
 			Bulk: "-1",
 		},
 	}})
-	reader.Read()
+	resp.Read()
+	resp.reader.ReadByte() // Consume the '$'
+
+	lengthLine, _, _ := resp.readLine() // Get the length string
+	length, _ := strconv.Atoi(string(lengthLine))
+
+	rdbBytes := make([]byte, length)
+	io.ReadFull(resp.reader, rdbBytes) // Read exactly 'length' bytes
 }
 
 func (s *ServerInfo) broadcaster() {
