@@ -120,7 +120,7 @@ func handleWatch(cs *ConnState, args []Value) Value {
 }
 
 func handleUnwatch(cs *ConnState, args []Value) Value {
-	if (len(args) != 0) {
+	if len(args) != 0 {
 		return Value{Type: ERROR, Str: "ERR Incorrect number of arguments for UNWATCH command"}
 	}
 	cs.watchState.state = make(map[string]WatchStateValue)
@@ -129,6 +129,11 @@ func handleUnwatch(cs *ConnState, args []Value) Value {
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
+	defer func() {
+		serverInfo.mu.Lock()
+		delete(serverInfo.replicaInfo, conn.RemoteAddr().String())
+		serverInfo.mu.Unlock()
+	}()
 
 	resp := NewResp(conn)
 	writer := NewWriter(conn)
@@ -173,7 +178,7 @@ func handleConnection(conn net.Conn) {
 		}
 
 		if servInfoHandler, ok := ServerHandler[command]; ok {
-			writer.Write(servInfoHandler(&serverInfo, args))
+			writer.Write(servInfoHandler(&serverInfo, conn, args))
 			continue
 		}
 

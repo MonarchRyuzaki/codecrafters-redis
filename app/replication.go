@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 )
 
 type ServerInfo struct {
@@ -12,25 +13,66 @@ type ServerInfo struct {
 	master_repl_offset int
 	master_host        string
 	master_port        string
+	self_port          string
+	replicaInfo        map[string]*ReplicaInfo
+	mu                 sync.Mutex
+}
+
+type ReplicaInfo struct {
+	replicaPort string
+	replicaCapa []string
 }
 
 var serverInfo = ServerInfo{}
 
-func NewServerInfo(role string, host, port string) *ServerInfo {
+func NewServerInfo(role string, host, masterPort string, selfPort string) *ServerInfo {
 	serverInfo.role = role
 	serverInfo.master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
 	serverInfo.master_repl_offset = 0
 	serverInfo.master_host = host
-	serverInfo.master_port = port
+	serverInfo.master_port = masterPort
+	serverInfo.self_port = selfPort
+	serverInfo.replicaInfo = make(map[string]*ReplicaInfo)
 	return &serverInfo
 }
 
-var ServerHandler = map[string]func(*ServerInfo, []Value) Value{
-	"INFO": handleInfo,
+var ServerHandler = map[string]func(*ServerInfo, net.Conn, []Value) Value{
+	"INFO":     handleInfo,
+	"REPLCONF": handleReplConf,
 }
 
-func handleInfo(s *ServerInfo, args []Value) Value {
+func handleInfo(s *ServerInfo, conn net.Conn, args []Value) Value {
 	return Value{Type: BULK, Bulk: fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%v", s.role, s.master_replid, s.master_repl_offset)}
+}
+
+func handleReplConf(s *ServerInfo, conn net.Conn, args []Value) Value {
+	connId := conn.RemoteAddr().String()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.replicaInfo[connId]; !exists {
+		s.replicaInfo[connId] = &ReplicaInfo{
+			replicaCapa: []string{},
+		}
+	}
+
+	//TODO: Since the s.replicaInfo is stateful, we need to also check when a conn drops so we can delete the key
+
+	switch args[0].Bulk {
+	case "listening-port":
+		if len(args) != 2 {
+			return Value{Type: ERROR, Str: "Invalid Arguments for 'ReplConf' command"}
+		}
+		s.replicaInfo[connId].replicaPort = args[1].Bulk
+
+	case "capa":
+		if len(args) < 2 {
+			return Value{Type: ERROR, Str: "Invalid Arguments for 'ReplConf' command"}
+		}
+		s.replicaInfo[connId].replicaCapa = append(s.replicaInfo[connId].replicaCapa, args[1].Bulk)
+	}
+
+	return Value{Type: STRING, Str: "OK"}
 }
 
 func (s *ServerInfo) performReplicationHandshake() {
@@ -48,7 +90,7 @@ func (s *ServerInfo) performReplicationHandshake() {
 	}
 	defer conn.Close()
 
-	// resp := NewResp(conn)
+	reader := NewResp(conn)
 	writer := NewWriter(conn)
 
 	writer.Write(Value{Type: ARRAY, Array: []Value{
@@ -57,4 +99,37 @@ func (s *ServerInfo) performReplicationHandshake() {
 			Bulk: "PING",
 		},
 	}})
+	reader.Read()
+
+	writer.Write(Value{Type: ARRAY, Array: []Value{
+		{
+			Type: BULK,
+			Bulk: "REPLCONF",
+		},
+		{
+			Type: BULK,
+			Bulk: "listening-port",
+		},
+		{
+			Type: BULK,
+			Bulk: s.self_port,
+		},
+	}})
+	reader.Read()
+
+	writer.Write(Value{Type: ARRAY, Array: []Value{
+		{
+			Type: BULK,
+			Bulk: "REPLCONF",
+		},
+		{
+			Type: BULK,
+			Bulk: "capa",
+		},
+		{
+			Type: BULK,
+			Bulk: "psync2",
+		},
+	}})
+	reader.Read()
 }
