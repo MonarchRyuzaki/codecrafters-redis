@@ -83,3 +83,26 @@ func decode(geoCode uint64) Coordinates {
 
 	return convertGridNumbersToCoordinates(gridLatitudeNumber, gridLongitudeNumber)
 }
+
+const EARTH_RADIUS_IN_METERS = 6372797.560856
+
+func haversine(theta float64) float64 {
+	return 0.5 * (1 - math.Cos(theta))
+}
+
+func degToRad(deg float64) float64 {
+	return deg * math.Pi / 180.0
+}
+
+// CalculateDistance returns the distance between two coordinates in meters
+func CalculateDistance(p1, p2 Coordinates) float64 {
+	lat1Rad := degToRad(p1.Latitude)
+	lon1Rad := degToRad(p1.Longitude)
+	lat2Rad := degToRad(p2.Latitude)
+	lon2Rad := degToRad(p2.Longitude)
+
+	h := haversine(lat2Rad-lat1Rad) +
+		math.Cos(lat1Rad)*math.Cos(lat2Rad)*haversine(lon2Rad-lon1Rad)
+
+	return 2 * EARTH_RADIUS_IN_METERS * math.Asin(math.Sqrt(h))
+}
