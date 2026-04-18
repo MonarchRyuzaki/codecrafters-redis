@@ -309,6 +309,7 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 
 		if !connState.isAuthenticated {
 			writer.Write(Value{Type: ERROR, Str: "NOAUTH Authentication required."})
+			continue
 		}
 
 		aofManager := GetAofManager()
