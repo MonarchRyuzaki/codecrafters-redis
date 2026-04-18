@@ -707,6 +707,60 @@ func geodist(args []Value) Value {
 	return Value{Type: BULK, Bulk: strconv.FormatFloat(distanceBetweenCoordinates, 'f', -1, 64)}
 }
 
-func geosearch(args []Value) Value {
-	return Value{}
+func geosearch(args []Value) Value { // ONLY "FROMLAT" , "BYRADIUS" is supported for now
+	if len(args) < 7 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'GEOSEARCH' command"}
+	}
+
+	key := args[0].Bulk
+
+	// args[1] is "FROMLONLAT", args[4] is "BYRADIUS"
+	lon, err1 := strconv.ParseFloat(args[2].Bulk, 64)
+	lat, err2 := strconv.ParseFloat(args[3].Bulk, 64)
+	radius, err3 := strconv.ParseFloat(args[5].Bulk, 64)
+	unit := strings.ToLower(args[6].Bulk)
+
+	if err1 != nil || err2 != nil || err3 != nil {
+		return Value{Type: ERROR, Str: "ERR value is not a valid float"}
+	}
+
+	var radiusMeters float64
+	switch unit {
+	case "m":
+		radiusMeters = radius
+	case "km":
+		radiusMeters = radius * 1000
+	case "mi":
+		radiusMeters = radius * 1609.34
+	case "ft":
+		radiusMeters = radius * 0.3048
+	default:
+		return Value{Type: ERROR, Str: "ERR unsupported unit"}
+	}
+
+	// Get all members in the set
+	members, err := db.ZRANGE(key, 0, -1)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	centerCoord := Coordinates{Latitude: lat, Longitude: lon}
+	var results []Value
+
+	// Check each member's distance
+	for _, member := range members {
+		score, exists, err := db.ZSCORE(key, member)
+		if err != nil || !exists {
+			continue
+		}
+
+		memberCoord := decode(uint64(score))
+		dist := CalculateDistance(centerCoord, memberCoord)
+
+		if dist <= radiusMeters {
+			results = append(results, Value{Type: BULK, Bulk: member})
+		}
+	}
+
+	return Value{Type: ARRAY, Array: results}
 }
