@@ -28,9 +28,14 @@ type WatchStateValue struct {
 	version int
 }
 
+type AuthState struct {
+	username string
+}
+
 type ConnState struct {
 	watchState *WatchState
 	tx         *TxState
+	auth       *AuthState
 }
 
 var ConnHandlers = map[string]func(*ConnState, []Value) Value{
@@ -39,6 +44,7 @@ var ConnHandlers = map[string]func(*ConnState, []Value) Value{
 	"DISCARD": handleDiscard,
 	"WATCH":   handleWatch,
 	"UNWATCH": handleUnwatch,
+	"ACL":     handleAcl,
 }
 
 var writeCommands = map[string]bool{
@@ -171,6 +177,21 @@ func handleUnwatch(cs *ConnState, args []Value) Value {
 	return Value{Type: STRING, Str: "OK"}
 }
 
+func handleAcl(cs *ConnState, args []Value) Value {
+	if len(args) < 1 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'ACL' command"}
+	}
+
+	subCommand := strings.ToUpper(args[0].Bulk)
+	switch subCommand {
+	case "WHOAMI":
+		return Value{Type: BULK, Bulk: cs.auth.username}
+
+	default:
+		return Value{}
+	}
+}
+
 func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Writer) {
 	defer conn.Close()
 	defer func() {
@@ -184,6 +205,9 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 			state: make(map[string]WatchStateValue),
 		},
 		tx: &TxState{},
+		auth: &AuthState{
+			username: "default",
+		},
 	}
 
 	for {
