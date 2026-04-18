@@ -139,5 +139,5 @@ func unsubscribe(cs *ConnState, conn net.Conn, args []Value) Value {
 		})
 	}
 
-	return Value{Type: ARRAY, Array: results}
+	return Value{Type: STREAMS, Array: results}
 }
