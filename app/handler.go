@@ -633,27 +633,43 @@ func geoadd(args []Value) Value {
 }
 
 func geopos(args []Value) Value {
-	if len(args) != 2 {
-		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'ZSCORE' command"}
+	if len(args) < 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'GEOPOS' command"}
 	}
 
 	key := args[0].Bulk
-	member := args[1].Bulk
+	members := args[1:]
 
-	score, exists, err := db.ZSCORE(key, member)
-	if err != nil {
-		return Value{Type: ERROR, Str: err.Error()}
+	out := make([]Value, 0, len(members))
+	for _, m := range members {
+		member := m.Bulk
+
+		score, exists, err := db.ZSCORE(key, member)
+		if err != nil {
+			return Value{Type: ERROR, Str: err.Error()}
+		}
+
+		if !exists {
+			out = append(out, Value{
+				Type: ARRAY,
+				Array: []Value{
+					{Type: BULK, Bulk: "$NULL$"},
+				},
+			})
+			continue
+		}
+
+		coordinates := decode(uint64(score))
+		out = append(out, Value{
+			Type: ARRAY,
+			Array: []Value{
+				{Type: BULK, Bulk: strconv.FormatFloat(coordinates.Longitude, 'f', -1, 64)},
+				{Type: BULK, Bulk: strconv.FormatFloat(coordinates.Latitude, 'f', -1, 64)},
+			},
+		})
 	}
 
-	if !exists {
-		return Value{Type: BULK, Bulk: "$NULL$"}
-	}
-
-	coordinates := decode(uint64(score))
-	return Value{Type: ARRAY, Array: []Value{
-		{Type: BULK, Bulk: strconv.FormatFloat(coordinates.Longitude, 'f', -1, 64)},
-		{Type: BULK, Bulk: strconv.FormatFloat(coordinates.Latitude, 'f', -1, 64)},
-	}}
+	return Value{Type: ARRAY, Array: out}
 }
 
 func geodist(args []Value) Value {
