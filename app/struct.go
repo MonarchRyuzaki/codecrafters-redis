@@ -13,6 +13,7 @@ const (
 	STREAM     = "stream"
 	ATOMIC_INT = "a_int"
 	ZSET       = "sorted_set"
+	PUBSUB     = "pubsub"
 )
 
 type StringValue struct {
@@ -60,4 +61,8 @@ type StreamValue struct {
 
 type ZsetValue struct {
 	zset *data_structures.SortedSet
+}
+
+type PubSubValue struct {
+	channels []chan Value
 }

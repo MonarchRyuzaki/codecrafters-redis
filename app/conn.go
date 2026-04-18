@@ -28,9 +28,16 @@ type WatchStateValue struct {
 	version int
 }
 
+type SubscribeState struct {
+	isSubscribed   bool
+	subscribedKeys []string
+	msgChan        chan Value
+}
+
 type ConnState struct {
 	watchState      *WatchState
 	tx              *TxState
+	subState        *SubscribeState
 	isAuthenticated bool
 }
 
@@ -62,6 +69,16 @@ var writeCommands = map[string]bool{
 var noExecLockCommands = map[string]bool{
 	"BLPOP": true,
 	"XREAD": true,
+}
+
+var allowedSubscribedCommands = map[string]bool{
+	"SUBSCRIBE":    true,
+	"UNSUBSCRIBE":  true,
+	"PSUBSCRIBE":   true,
+	"PUNSUBSCRIBE": true,
+	"PING":         true,
+	"QUIT":         true,
+	"RESET":        true,
 }
 
 func handleMulti(cs *ConnState, args []Value) Value {
@@ -264,6 +281,13 @@ func handleAuth(cs *ConnState, args []Value) Value {
 	return Value{Type: STRING, Str: "OK"}
 }
 
+func pubsubMessagePump(writer *Writer, msgChan <-chan Value) {
+	// This loop sleeps automatically when empty and wakes up when a message arrives
+	for msg := range msgChan {
+		writer.Write(msg)
+	}
+}
+
 func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Writer) {
 	defer conn.Close()
 	defer func() {
@@ -279,7 +303,21 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 		},
 		tx:              &TxState{},
 		isAuthenticated: u.authenticateOnStartup(),
+		subState: &SubscribeState{
+			isSubscribed:   false,
+			subscribedKeys: make([]string, 0),
+			msgChan:        make(chan Value, 100),
+		},
 	}
+	go pubsubMessagePump(writer, connState.subState.msgChan)
+
+	defer func() {
+		if len(connState.subState.subscribedKeys) > 0 {
+			db.UNSUBSCRIBE(connState.subState.subscribedKeys, connState.subState.msgChan)
+		}
+		
+		close(connState.subState.msgChan)
+	}()
 
 	for {
 		offsetBefore := resp.BytesRead()
@@ -313,6 +351,14 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 		if !connState.isAuthenticated {
 			writer.Write(Value{Type: ERROR, Str: "NOAUTH Authentication required."})
 			continue
+		}
+
+		if connState.subState.isSubscribed {
+			if !allowedSubscribedCommands[command] {
+				errorMsg := fmt.Sprintf("ERR Can't execute '%s': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context", strings.ToLower(command))
+				writer.Write(Value{Type: ERROR, Str: errorMsg})
+				continue
+			}
 		}
 
 		aofManager := GetAofManager()
@@ -354,6 +400,14 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 		} else if persHandler, ok := PersistanceHandler[command]; ok {
 			if !isMasterStream {
 				writer.Write(persHandler(getPersister(), conn, args, resp, writer))
+			}
+		} else if pubsubHandler, ok := pubsubHandler[command]; ok {
+			var result Value
+			db.WithExecLock(func() {
+				result = pubsubHandler(connState, conn, args)
+			})
+			if !isMasterStream {
+				writer.Write(result)
 			}
 		} else {
 			handler, ok := Handlers[command]

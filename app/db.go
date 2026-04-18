@@ -765,7 +765,6 @@ func (db *DB) ZRANGE(key string, start, end int) ([]string, error) {
 	for i, x := range nodes {
 		members[i] = x.Member
 	}
-	
 
 	return members, nil
 }
@@ -781,7 +780,7 @@ func (db *DB) ZCARD(key string) (int, error) {
 	if val.Type != ZSET {
 		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
-	
+
 	zset := val.Value.(ZsetValue)
 	return zset.zset.Card(), nil
 }
@@ -797,7 +796,7 @@ func (db *DB) ZSCORE(key, member string) (float64, bool, error) {
 	if val.Type != ZSET {
 		return 0, false, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
-	
+
 	zset := val.Value.(ZsetValue)
 	score, exists := zset.zset.Score(member)
 	return score, exists, nil
@@ -817,7 +816,7 @@ func (db *DB) ZREM(key string, members []string) (int, error) {
 
 	zset := val.Value.(ZsetValue)
 	removedCount := 0
-	
+
 	for _, member := range members {
 		removedCount += zset.zset.Remove(member)
 	}
@@ -832,4 +831,81 @@ func (db *DB) ZREM(key string, members []string) (int, error) {
 	}
 
 	return removedCount, nil
+}
+
+func (db *DB) SUBSCRIBE(keys []string, msgChan chan Value) (bool, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	for _, x := range keys {
+		if val, ok := db.mmap[x]; ok {
+			if val.Type != PUBSUB {
+				return false, fmt.Errorf("ERR Existing Key %s cannot be used as channel", x)
+			}
+		}
+	}
+	for _, x := range keys {
+		var pubsub PubSubValue
+		if val, ok := db.mmap[x]; ok {
+			pubsub = val.Value.(PubSubValue)
+		} else {
+			pubsub = PubSubValue{channels: make([]chan Value, 0)}
+		}
+
+		pubsub.channels = append(pubsub.channels, msgChan)
+
+		db.mmap[x] = MapValue{
+			Type:  PUBSUB,
+			Value: pubsub,
+		}
+	}
+	return true, nil
+}
+
+func (db *DB) PUBLISH(channel string, message Value) int {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	val, ok := db.mmap[channel]
+	if !ok || val.Type != PUBSUB {
+		return 0
+	}
+
+	pubsub := val.Value.(PubSubValue)
+	receivers := 0
+
+	for _, ch := range pubsub.channels {
+		select {
+		case ch <- message:
+			receivers++
+		default:
+			// Buffer full, drop message for this slow client
+		}
+	}
+
+	return receivers
+}
+
+func (db *DB) UNSUBSCRIBE(keys []string, msgChan chan Value) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	for _, channel := range keys {
+		if val, ok := db.mmap[channel]; ok && val.Type == PUBSUB {
+			pubsub := val.Value.(PubSubValue)
+
+			// Filter out this connection's channel
+			var newChannels []chan Value
+			for _, ch := range pubsub.channels {
+				if ch != msgChan {
+					newChannels = append(newChannels, ch)
+				}
+			}
+
+			pubsub.channels = newChannels
+			db.mmap[channel] = MapValue{
+				Type:  PUBSUB,
+				Value: pubsub,
+			}
+		}
+	}
 }
