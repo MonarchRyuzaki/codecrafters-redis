@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -18,18 +22,58 @@ func NewAOF() (*AOF, error) {
 		return aofManager, nil
 	}
 	p := getPersister()
-	appendPath := p.dir + "/" + p.appendDirName
+	appendPath := filepath.Join(p.dir, p.appendDirName)
 
 	if err := os.MkdirAll(appendPath, 0755); err != nil {
 		return nil, err
 	}
 
-	appendFilePath := appendPath + "/" + p.appendFileName
+	manifestPath := filepath.Join(appendPath, p.appendFileName+".manifest")
 
+	var latestNum int = 0
+	var latestIncrFile string
+
+	manifestFile, err := os.OpenFile(manifestPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	if err != nil {
+		return nil, err
+	}
+	defer manifestFile.Close()
+
+	scanner := bufio.NewScanner(manifestFile)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Look for incremental file entries like: file appendonly.1.incr.aof seq 1 type i
+		if strings.Contains(line, "type i") {
+			var fname, t string
+			var s int
+			_, err := fmt.Sscanf(line, "file %s seq %d type %s", &fname, &s, &t)
+			if err == nil && s > latestNum {
+				latestNum = s
+				latestIncrFile = fname
+			}
+		}
+	}
+
+	if latestNum == 0 {
+		latestNum = 1
+
+		ext := filepath.Ext(p.appendFileName)
+		base := strings.TrimSuffix(p.appendFileName, ext)
+
+		latestIncrFile = fmt.Sprintf("%s.%d.incr%s", base, latestNum, ext)
+
+		manifestLine := fmt.Sprintf("file %s seq %d type i\n", latestIncrFile, latestNum)
+		if _, err := manifestFile.WriteString(manifestLine); err != nil {
+			return nil, err
+		}
+	}
+
+	appendFilePath := filepath.Join(appendPath, latestIncrFile)
 	f, err := os.OpenFile(appendFilePath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, err
 	}
+
 	aofManager = &AOF{file: f}
 	return aofManager, nil
 }
