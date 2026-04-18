@@ -31,6 +31,7 @@ var Handlers = map[string]func([]Value) Value{
 	"ZRANGE":         zrange,
 	"ZCARD":          zcard,
 	"ZSCORE":         zscore,
+	"ZREM":           zrem,
 }
 
 func ping(args []Value) Value {
@@ -547,10 +548,57 @@ func zrange(args []Value) Value {
 }
 
 func zcard(args []Value) Value {
-	return Value{}
+	if len(args) != 1 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'ZCARD' command"}
+	}
+
+	key := args[0].Bulk
+	count, err := db.ZCARD(key)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: INTEGER, Num: count}
 
 }
 
 func zscore(args []Value) Value {
-	return Value{}
+	if len(args) != 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'ZSCORE' command"}
+	}
+
+	key := args[0].Bulk
+	member := args[1].Bulk
+
+	score, exists, err := db.ZSCORE(key, member)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	if !exists {
+		return Value{Type: BULK, Bulk: "$NULL$"}
+	}
+
+	scoreStr := strconv.FormatFloat(score, 'f', -1, 64)
+	return Value{Type: BULK, Bulk: scoreStr}
+}
+
+func zrem(args []Value) Value {
+	if len(args) < 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'ZREM' command"}
+	}
+
+	key := args[0].Bulk
+	members := make([]string, 0, len(args)-1)
+
+	for i := 1; i < len(args); i++ {
+		members = append(members, args[i].Bulk)
+	}
+
+	removedCount, err := db.ZREM(key, members)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: INTEGER, Num: removedCount}
 }

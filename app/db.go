@@ -769,3 +769,67 @@ func (db *DB) ZRANGE(key string, start, end int) ([]string, error) {
 
 	return members, nil
 }
+
+func (db *DB) ZCARD(key string) (int, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	val, ok := db.mmap[key]
+	if !ok {
+		return 0, nil
+	}
+	if val.Type != ZSET {
+		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+	
+	zset := val.Value.(ZsetValue)
+	return zset.zset.Card(), nil
+}
+
+func (db *DB) ZSCORE(key, member string) (float64, bool, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	val, ok := db.mmap[key]
+	if !ok {
+		return 0, false, nil
+	}
+	if val.Type != ZSET {
+		return 0, false, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+	
+	zset := val.Value.(ZsetValue)
+	score, exists := zset.zset.Score(member)
+	return score, exists, nil
+}
+
+func (db *DB) ZREM(key string, members []string) (int, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	val, ok := db.mmap[key]
+	if !ok {
+		return 0, nil
+	}
+	if val.Type != ZSET {
+		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+
+	zset := val.Value.(ZsetValue)
+	removedCount := 0
+	
+	for _, member := range members {
+		removedCount += zset.zset.Remove(member)
+	}
+
+	if zset.zset.Card() == 0 {
+		delete(db.mmap, key)
+	} else {
+		db.mmap[key] = MapValue{
+			Type:  ZSET,
+			Value: zset,
+		}
+	}
+
+	return removedCount, nil
+}

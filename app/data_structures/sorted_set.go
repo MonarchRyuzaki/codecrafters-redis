@@ -55,10 +55,10 @@ func (z *SortedSet) Add(score float64, member string) int {
 }
 
 // Remove deletes a member from the sorted set
-func (z *SortedSet) Remove(member string) {
+func (z *SortedSet) Remove(member string) int  {
 	score, exists := z.lookup[member]
 	if !exists {
-		return
+		return 0
 	}
 
 	targetNode := ZSetNode{Score: score, Member: member}
@@ -68,6 +68,7 @@ func (z *SortedSet) Remove(member string) {
 		z.nodes = slices.Delete(z.nodes, index, index+1)
 	}
 	delete(z.lookup, member)
+	return 1;
 }
 
 // GetRange returns a slice of nodes between start and stop indices (inclusive)
@@ -110,4 +111,13 @@ func (z *SortedSet) Rank(member string) int {
 		return index
 	}
 	return -1
+}
+
+func (z *SortedSet) Card() int {
+	return len(z.nodes)
+}
+
+func (z *SortedSet) Score(member string) (float64, bool) {
+	score, exists := z.lookup[member]
+	return score, exists
 }
