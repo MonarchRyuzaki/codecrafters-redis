@@ -673,7 +673,38 @@ func geopos(args []Value) Value {
 }
 
 func geodist(args []Value) Value {
-	return Value{}
+	if len(args) < 3 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'GEODIST' command"}
+	}
+
+	key := args[0].Bulk
+	members := args[1:]
+
+	out := make([]Coordinates, 0, len(members))
+	for _, m := range members {
+		member := m.Bulk
+
+		score, exists, err := db.ZSCORE(key, member)
+		if err != nil {
+			return Value{Type: ERROR, Str: err.Error()}
+		}
+
+		if !exists {
+			return Value{
+				Type: ARRAY,
+				Array: []Value{
+					{Type: BULK, Bulk: "$NULL$"},
+				},
+			}
+		}
+
+		coordinates := decode(uint64(score))
+		out = append(out, coordinates)
+	}
+
+	distanceBetweenCoordinates := CalculateDistance(out[0], out[1]);
+
+	return Value{Type: BULK, Bulk: strconv.FormatFloat(distanceBetweenCoordinates, 'f', -1, 64)}
 }
 
 func geosearch(args []Value) Value {
