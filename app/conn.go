@@ -28,14 +28,10 @@ type WatchStateValue struct {
 	version int
 }
 
-type AuthState struct {
-	username string
-}
-
 type ConnState struct {
-	watchState *WatchState
-	tx         *TxState
-	auth       *AuthState
+	watchState      *WatchState
+	tx              *TxState
+	isAuthenticated bool
 }
 
 var ConnHandlers = map[string]func(*ConnState, []Value) Value{
@@ -45,6 +41,7 @@ var ConnHandlers = map[string]func(*ConnState, []Value) Value{
 	"WATCH":   handleWatch,
 	"UNWATCH": handleUnwatch,
 	"ACL":     handleAcl,
+	"AUTH":    handleAuth,
 }
 
 var writeCommands = map[string]bool{
@@ -185,11 +182,83 @@ func handleAcl(cs *ConnState, args []Value) Value {
 	subCommand := strings.ToUpper(args[0].Bulk)
 	switch subCommand {
 	case "WHOAMI":
-		return Value{Type: BULK, Bulk: cs.auth.username}
+		return Value{Type: BULK, Bulk: GetUser().username}
+	case "GETUSER":
+		if len(args) < 2 {
+			return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'ACL GETUSER' command"}
+		}
 
+		targetUser := args[1].Bulk
+		u := GetUser()
+
+		if u == nil || u.username != targetUser {
+			return Value{Type: BULK, Bulk: "$NULL$"}
+		}
+
+		flagsArray := make([]Value, len(u.Flags))
+		for i, flag := range u.Flags {
+			flagsArray[i] = Value{Type: BULK, Bulk: flag}
+		}
+
+		passwordsArray := make([]Value, len(u.Passwords))
+		for i, pwd := range u.Passwords {
+			passwordsArray[i] = Value{Type: BULK, Bulk: pwd}
+		}
+
+		return Value{
+			Type: ARRAY,
+			Array: []Value{
+				{Type: BULK, Bulk: "flags"},
+				{Type: ARRAY, Array: flagsArray},
+				{Type: BULK, Bulk: "passwords"},
+				{Type: ARRAY, Array: passwordsArray},
+			},
+		}
+	case "SETUSER":
+		if len(args) < 2 {
+			return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'ACL SETUSER' command"}
+		}
+
+		targetUser := args[1].Bulk
+		u := GetUser()
+
+		if u == nil || u.username != targetUser {
+			return Value{Type: ERROR, Str: "ERR user does not exist"}
+		}
+
+		for i := 2; i < len(args); i++ {
+			rule := args[i].Bulk
+
+			if strings.HasPrefix(rule, ">") {
+				plainPassword := strings.TrimPrefix(rule, ">")
+				u.setPassword(plainPassword)
+
+			} else if rule == "nopass" {
+				u.setNoPass()
+			}
+		}
+
+		return Value{Type: STRING, Str: "OK"}
 	default:
 		return Value{}
 	}
+}
+
+func handleAuth(cs *ConnState, args []Value) Value {
+	if len(args) < 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'ACL' command"}
+	}
+
+	targetUser := args[0].Bulk
+	targetPassword := args[1].Bulk
+
+	success := GetUser().authenticate(targetUser, targetPassword)
+
+	cs.isAuthenticated = success
+	if !success {
+		return Value{Type: ERROR, Str: "WRONGPASS invalid username-password pair or user is disabled."}
+	}
+	return Value{Type: STRING, Str: "OK"}
 }
 
 func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Writer) {
@@ -200,14 +269,13 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 		serverInfo.mu.Unlock()
 	}()
 
+	u := NewUserAuth()
 	connState := &ConnState{
 		watchState: &WatchState{
 			state: make(map[string]WatchStateValue),
 		},
-		tx: &TxState{},
-		auth: &AuthState{
-			username: "default",
-		},
+		tx:              &TxState{},
+		isAuthenticated: u.authenticateOnStartup(),
 	}
 
 	for {
@@ -233,6 +301,15 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 
 		command := strings.ToUpper(value.Array[0].Bulk)
 		args := value.Array[1:]
+
+		if command == "AUTH" {
+			writer.Write(handleAuth(connState, args))
+			continue
+		}
+
+		if !connState.isAuthenticated {
+			writer.Write(Value{Type: ERROR, Str: "NOAUTH Authentication required."})
+		}
 
 		aofManager := GetAofManager()
 		if aofManager != nil && writeCommands[command] {
