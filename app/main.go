@@ -35,7 +35,11 @@ func main() {
 	}
 
 	s := NewServerInfo(role, host, masterPort, *port)
-	getPersister(*dir, *dbFileName)
+	p := getPersister(*dir, *dbFileName)
+	err := LoadRDB(p.rdbPath, db)
+	if err != nil {
+		fmt.Println("Error loading RDB:", err)
+	}
 	go s.startReplicator()
 
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", *port))

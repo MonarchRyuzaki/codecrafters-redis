@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,9 +30,9 @@ func NewDB() *DB {
 var db = NewDB()
 
 func (db *DB) WithExecLock(fn func()) {
-    db.execMu.Lock()
-    defer db.execMu.Unlock()
-    fn()
+	db.execMu.Lock()
+	defer db.execMu.Unlock()
+	fn()
 }
 
 func (db *DB) Set(key string, value string, ttl time.Duration, isPermanent bool) {
@@ -669,4 +670,29 @@ func (db *DB) INCR(key string) (int, error) {
 	}
 
 	return ival + 1, nil
+}
+
+func (db *DB) Keys(pattern string) []string {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var result []string
+	now := time.Now()
+
+	for key, val := range db.mmap {
+		if val.Type == STRING_ {
+			sv, ok := val.Value.(StringValue)
+			if ok && !sv.IsPermanent && now.After(sv.ExitTime) {
+				continue
+			}
+		}
+
+		// Use Go's built-in glob matching, though only "*" pattern is checked
+		matched, err := filepath.Match(pattern, key)
+		if err == nil && matched {
+			result = append(result, key)
+		}
+	}
+
+	return result
 }

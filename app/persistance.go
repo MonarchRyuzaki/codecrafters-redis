@@ -8,6 +8,7 @@ import (
 type Persistance struct {
 	dir        string
 	dbFileName string
+	rdbPath    string
 }
 
 var p *Persistance = nil
@@ -19,6 +20,7 @@ func getPersister(dir, dbFileName string) *Persistance {
 	p = &Persistance{
 		dir:        dir,
 		dbFileName: dbFileName,
+		rdbPath:    dir + "/" + dbFileName,
 	}
 	return p
 }

@@ -25,6 +25,7 @@ var Handlers = map[string]func([]Value) Value{
 	"XRANGE":         xrange,
 	"XREAD":          xread,
 	"INCR":           incr,
+	"KEYS":           keys,
 }
 
 func ping(args []Value) Value {
@@ -446,4 +447,21 @@ func getWithVersion(args []Value) Value {
 		{Type: BULK, Bulk: val},
 		{Type: INTEGER, Num: version},
 	}}
+}
+
+func keys(args []Value) Value {
+	if len(args) != 1 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'keys' command"}
+	}
+
+	pattern := args[0].Bulk
+
+	matchedKeys := db.Keys(pattern)
+
+	var arr []Value
+	for _, k := range matchedKeys {
+		arr = append(arr, Value{Type: BULK, Bulk: k})
+	}
+
+	return Value{Type: ARRAY, Array: arr}
 }
