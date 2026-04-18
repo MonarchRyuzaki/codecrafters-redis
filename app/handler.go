@@ -473,16 +473,22 @@ func zadd(args []Value) Value {
 	}
 
 	key := args[0].Bulk
-	score, err := strconv.ParseFloat(args[1].Bulk, 64)
-	if err != nil {
-		return Value{Type: ERROR, Str: err.Error()}
-	}
-	member := args[1].Bulk
+	addedCount := 0
 
-	delta, err := db.ZADD(key, score, member)
-	if err != nil {
-		return Value{Type: ERROR, Str: err.Error()}
+	for i := 1; i < len(args); i += 2 {
+		score, err := strconv.ParseFloat(args[i].Bulk, 64)
+		if err != nil {
+			return Value{Type: ERROR, Str: "ERR value is not a valid float"}
+		}
+
+		member := args[i+1].Bulk
+
+		delta, err := db.ZADD(key, score, member)
+		if err != nil {
+			return Value{Type: ERROR, Str: err.Error()}
+		}
+		addedCount += delta
 	}
 
-	return Value{Type: INTEGER, Num: delta}
+	return Value{Type: INTEGER, Num: addedCount}
 }
