@@ -242,7 +242,7 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 			}
 		} else if persHandler, ok := PersistanceHandler[command]; ok {
 			if !isMasterStream {
-				writer.Write(persHandler(getPersister("", "", "", "", "", ""), conn, args, resp, writer))
+				writer.Write(persHandler(getPersister(), conn, args, resp, writer))
 			}
 		} else {
 			handler, ok := Handlers[command]

@@ -43,8 +43,13 @@ func main() {
 	}
 
 	s := NewServerInfo(role, host, masterPort, *port)
-	p := getPersister(*dir, *dbFileName, *appendOnly, *appendDirName, *appendFileName, *appendFsync)
+	p := NewPersister(*dir, *dbFileName, *appendOnly, *appendDirName, *appendFileName, *appendFsync)
 	err = LoadRDB(p.rdbPath, db)
+
+	if p.appendOnly == "yes" {
+		NewAOF()
+	}
+
 	if err != nil {
 		fmt.Println("Error loading RDB:", err)
 	}

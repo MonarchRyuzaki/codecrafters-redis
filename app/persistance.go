@@ -17,7 +17,7 @@ type Persistance struct {
 
 var p *Persistance = nil
 
-func getPersister(dir, dbFileName, appendOnly, appendDirName, appendFileName, appendFsync string) *Persistance {
+func NewPersister(dir, dbFileName, appendOnly, appendDirName, appendFileName, appendFsync string) *Persistance {
 	if p != nil {
 		return p
 	}
@@ -31,6 +31,10 @@ func getPersister(dir, dbFileName, appendOnly, appendDirName, appendFileName, ap
 		appendFsync:    appendFsync,
 	}
 	return p
+}
+
+func getPersister() *Persistance {
+	return p;
 }
 
 var PersistanceHandler = map[string]func(*Persistance, net.Conn, []Value, *Resp, *Writer) Value{
