@@ -743,3 +743,29 @@ func (db *DB) ZRANK(key, member string) (int, error) {
 
 	return del, nil
 }
+
+func (db *DB) ZRANGE(key string, start, end int) ([]string, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var zset ZsetValue
+	if val, ok := db.mmap[key]; ok {
+		if val.Type != ZSET {
+			return nil, errors.New("ERR Existing Key is not a Sorted Set")
+		}
+		zset = val.Value.(ZsetValue)
+	} else if !ok {
+		return []string{}, nil
+	}
+
+	nodes := zset.zset.GetRange(start, end)
+
+	members := make([]string, len(nodes))
+
+	for i, x := range nodes {
+		members[i] = x.Member
+	}
+	
+
+	return members, nil
+}

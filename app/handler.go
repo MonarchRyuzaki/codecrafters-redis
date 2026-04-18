@@ -28,6 +28,9 @@ var Handlers = map[string]func([]Value) Value{
 	"KEYS":           keys,
 	"ZADD":           zadd,
 	"ZRANK":          zrank,
+	"ZRANGE":         zrange,
+	"ZCARD":          zcard,
+	"ZSCORE":         zscore,
 }
 
 func ping(args []Value) Value {
@@ -513,4 +516,41 @@ func zrank(args []Value) Value {
 	}
 
 	return Value{Type: BULK, Bulk: "$NULL$"}
+}
+
+func zrange(args []Value) Value {
+	if len(args) < 2 {
+		return Value{Type: ERROR, Str: "Invalid Number of arguments for 'ZRANK' command"}
+	}
+
+	key := args[0].Bulk
+	start, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+	end, err := strconv.Atoi(args[2].Bulk)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	members, err := db.ZRANGE(key, start, end)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	valArr := make([]Value, len(members))
+	for i, x := range members {
+		valArr[i] = Value{Type: BULK, Bulk: x}
+	}
+
+	return Value{Type: ARRAY, Array: valArr}
+}
+
+func zcard(args []Value) Value {
+	return Value{}
+
+}
+
+func zscore(args []Value) Value {
+	return Value{}
 }
