@@ -26,6 +26,7 @@ var Handlers = map[string]func([]Value) Value{
 	"XREAD":          xread,
 	"INCR":           incr,
 	"KEYS":           keys,
+	"ZADD":           zadd,
 }
 
 func ping(args []Value) Value {
@@ -464,4 +465,24 @@ func keys(args []Value) Value {
 	}
 
 	return Value{Type: ARRAY, Array: arr}
+}
+
+func zadd(args []Value) Value {
+	if len(args) < 3 {
+		return Value{Type: ERROR, Str: "Invalid Number of arguments for 'ZADD' command"}
+	}
+
+	key := args[0].Bulk
+	score, err := strconv.ParseFloat(args[1].Bulk, 64)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+	member := args[1].Bulk
+
+	delta, err := db.ZADD(key, score, member)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: INTEGER, Num: delta}
 }

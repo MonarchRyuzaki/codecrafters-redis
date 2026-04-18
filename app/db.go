@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/codecrafters-io/redis-starter-go/app/data_structures"
 )
 
 type DB struct {
@@ -695,4 +697,30 @@ func (db *DB) Keys(pattern string) []string {
 	}
 
 	return result
+}
+
+func (db *DB) ZADD(key string, score float64, member string) (int, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	var zset ZsetValue
+	if val, ok := db.mmap[key]; ok {
+		if val.Type != ZSET {
+			return 0, errors.New("ERR Existing Key is not a Sorted Set")
+		}
+		zset = val.Value.(ZsetValue)
+	} else if !ok {
+		zset = ZsetValue{
+			zset: data_structures.NewSortedSet(),
+		}
+	}
+
+	del := zset.zset.Add(score, member)
+
+	db.mmap[key] = MapValue{
+		Type:  ZSET,
+		Value: zset,
+	}
+
+	return del, nil
 }

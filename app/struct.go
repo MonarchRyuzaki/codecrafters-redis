@@ -3,13 +3,16 @@ package main
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/codecrafters-io/redis-starter-go/app/data_structures"
 )
 
 const (
-	STRING_ = "string"
-	LIST    = "list"
-	STREAM  = "stream"
+	STRING_    = "string"
+	LIST       = "list"
+	STREAM     = "stream"
 	ATOMIC_INT = "a_int"
+	ZSET       = "sorted_set"
 )
 
 type StringValue struct {
@@ -53,4 +56,8 @@ type StreamEntry struct {
 
 type StreamValue struct {
 	Entries []StreamEntry
+}
+
+type ZsetValue struct {
+	zset *data_structures.SortedSet
 }

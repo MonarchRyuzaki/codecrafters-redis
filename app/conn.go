@@ -54,6 +54,7 @@ var writeCommands = map[string]bool{
 	"BLPOP":          true,
 	"XADD":           true,
 	"INCR":           true,
+	"ZADD":           true,
 }
 
 var noExecLockCommands = map[string]bool{
