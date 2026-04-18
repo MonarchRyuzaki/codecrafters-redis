@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type AOF struct {
@@ -72,10 +73,18 @@ func NewAOF() (*AOF, error) {
 	}
 
 	aofManager = &AOF{file: f}
+	if getPersister().appendFsync == "everysec" {
+		go func(aofManager *AOF) {
+			for {
+				time.Sleep(1 * time.Second)
+				aofManager.file.Sync()
+			}
+		}(aofManager)
+	}
 	return aofManager, nil
 }
 
-func (a *AOF) GetAofManager() *AOF {
+func GetAofManager() *AOF {
 	return aofManager
 }
 
@@ -90,7 +99,6 @@ func (a *AOF) Write(val Value) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	// Use your existing Writer logic to marshal the value to bytes
 	writer := &Writer{}
 	bytes := writer.marshalValue(val)
 
@@ -99,8 +107,10 @@ func (a *AOF) Write(val Value) error {
 		return err
 	}
 
-	// Ensure it hits the disk
-	return a.file.Sync()
+	if getPersister().appendFsync == "always" {
+		return a.file.Sync()
+	}
+	return nil
 }
 
 // ReadAndRestore reads the AOF file on startup and applies commands

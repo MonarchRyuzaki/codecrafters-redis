@@ -210,6 +210,12 @@ func handleConnection(conn net.Conn, isMasterStream bool, resp *Resp, writer *Wr
 		command := strings.ToUpper(value.Array[0].Bulk)
 		args := value.Array[1:]
 
+		aofManager := GetAofManager()
+		if aofManager != nil && writeCommands[command] {
+			fullCmd := append([]Value{{Type: BULK, Bulk: command}}, args...)
+			aofManager.Write(Value{Type: ARRAY, Array: fullCmd})
+		}
+
 		if connHandler, ok := ConnHandlers[command]; ok {
 			if !isMasterStream {
 				writer.Write(connHandler(connState, args))
