@@ -55,6 +55,8 @@ var writeCommands = map[string]bool{
 	"XADD":           true,
 	"INCR":           true,
 	"ZADD":           true,
+	"ZREM":           true,
+	"GEOADD":         true,
 }
 
 var noExecLockCommands = map[string]bool{
