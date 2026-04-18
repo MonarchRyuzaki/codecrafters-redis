@@ -32,6 +32,10 @@ var Handlers = map[string]func([]Value) Value{
 	"ZCARD":          zcard,
 	"ZSCORE":         zscore,
 	"ZREM":           zrem,
+	"GEOADD":         geoadd,
+	"GEOPOS":         geopos,
+	"GEODIST":        geodist,
+	"GEOSEARCH":      geosearch,
 }
 
 func ping(args []Value) Value {
@@ -601,4 +605,61 @@ func zrem(args []Value) Value {
 	}
 
 	return Value{Type: INTEGER, Num: removedCount}
+}
+
+func geoadd(args []Value) Value {
+	if len(args) < 4 {
+		return Value{Type: ERROR, Str: "Invalid Number of arguments for 'ZADD' command"}
+	}
+
+	key := args[0].Bulk
+	long, err1 := strconv.ParseFloat(args[1].Bulk, 64)
+	lat, err2 := strconv.ParseFloat(args[2].Bulk, 64)
+	if err1 != nil || err2 != nil {
+		return Value{Type: ERROR, Str: "ERR value is not a valid float"}
+	}
+	if long < -180 || long > 180 || lat < -85.05112878 || lat > 85.05112878 {
+		return Value{Type: ERROR, Str: fmt.Sprintf("ERR invalid longitude,latitude pair %f,%f", long, lat)}
+	}
+	member := args[3].Bulk
+
+	score := float64(encode(lat, long))
+	delta, err := db.ZADD(key, score, member)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	return Value{Type: INTEGER, Num: delta}
+}
+
+func geopos(args []Value) Value {
+	if len(args) != 2 {
+		return Value{Type: ERROR, Str: "ERR wrong number of arguments for 'ZSCORE' command"}
+	}
+
+	key := args[0].Bulk
+	member := args[1].Bulk
+
+	score, exists, err := db.ZSCORE(key, member)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	if !exists {
+		return Value{Type: BULK, Bulk: "$NULL$"}
+	}
+
+	coordinates := decode(uint64(score))
+	return Value{Type: ARRAY, Array: []Value{
+		{Type: BULK, Bulk: strconv.FormatFloat(coordinates.Longitude, 'f', -1, 64)},
+		{Type: BULK, Bulk: strconv.FormatFloat(coordinates.Latitude, 'f', -1, 64)},
+	}}
+}
+
+func geodist(args []Value) Value {
+	return Value{}
+}
+
+func geosearch(args []Value) Value {
+	return Value{}
 }
