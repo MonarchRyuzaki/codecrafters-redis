@@ -16,6 +16,9 @@ func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	port := flag.String("port", "6379", "Port to bind the server to")
 	replicaof := flag.String("replicaof", "", "master server to connect to")
+	dir := flag.String("dir", "/tmp/redis-data", " the path to the directory where the RDB & AOF file is stored")
+	dbFileName := flag.String("dbfilename", "rdbfile.rdb", " the name of the RDB file")
+
 	flag.Parse()
 
 	fmt.Println("Logs from your program will appear here!")
@@ -32,6 +35,7 @@ func main() {
 	}
 
 	s := NewServerInfo(role, host, masterPort, *port)
+	getPersister(*dir, *dbFileName)
 	go s.startReplicator()
 
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", *port))
