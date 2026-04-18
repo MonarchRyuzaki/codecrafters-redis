@@ -27,6 +27,7 @@ var Handlers = map[string]func([]Value) Value{
 	"INCR":           incr,
 	"KEYS":           keys,
 	"ZADD":           zadd,
+	"ZRANK":          zrank,
 }
 
 func ping(args []Value) Value {
@@ -491,4 +492,25 @@ func zadd(args []Value) Value {
 	}
 
 	return Value{Type: INTEGER, Num: addedCount}
+}
+
+func zrank(args []Value) Value {
+	if len(args) < 2 {
+		return Value{Type: ERROR, Str: "Invalid Number of arguments for 'ZRANK' command"}
+	}
+
+	key := args[0].Bulk
+	member := args[1].Bulk
+
+	pos, err := db.ZRANK(key, member)
+	if err != nil {
+		return Value{Type: ERROR, Str: err.Error()}
+	}
+
+	if pos >= 0 {
+		return Value{Type: INTEGER, Num: pos}
+
+	}
+
+	return Value{Type: BULK, Bulk: "$NULL$"}
 }

@@ -724,3 +724,22 @@ func (db *DB) ZADD(key string, score float64, member string) (int, error) {
 
 	return del, nil
 }
+
+func (db *DB) ZRANK(key, member string) (int, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var zset ZsetValue
+	if val, ok := db.mmap[key]; ok {
+		if val.Type != ZSET {
+			return -1, errors.New("ERR Existing Key is not a Sorted Set")
+		}
+		zset = val.Value.(ZsetValue)
+	} else if !ok {
+		return -1, nil
+	}
+
+	del := zset.zset.Rank(member)
+
+	return del, nil
+}

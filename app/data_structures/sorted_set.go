@@ -96,3 +96,18 @@ func (z *SortedSet) GetRange(start, stop int) []ZSetNode {
 
 	return z.nodes[start : stop+1]
 }
+
+func (z *SortedSet) Rank(member string) int {
+	score, exists := z.lookup[member]
+	if !exists {
+		return -1
+	}
+
+	targetNode := ZSetNode{Score: score, Member: member}
+	index, found := slices.BinarySearchFunc(z.nodes, targetNode, compareZSetNodes)
+
+	if found {
+		return index
+	}
+	return -1
+}
