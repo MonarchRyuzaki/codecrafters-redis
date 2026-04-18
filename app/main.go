@@ -16,7 +16,11 @@ func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	port := flag.String("port", "6379", "Port to bind the server to")
 	replicaof := flag.String("replicaof", "", "master server to connect to")
-	dir := flag.String("dir", "/tmp/redis-data", "The base directory where Redis stores its data files")
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	dir := flag.String("dir", cwd, "The base directory where Redis stores its data files")
 	dbFileName := flag.String("dbfilename", "rdbfile.rdb", " the name of the RDB file")
 	appendOnly := flag.String("appendonly", "no", "Controls whether AOF persistence is enabled or disabled")
 	appendDirName := flag.String("appenddirname", "appendonlydir", "The subdirectory under dir where AOF and manifest files are stored")
@@ -40,7 +44,7 @@ func main() {
 
 	s := NewServerInfo(role, host, masterPort, *port)
 	p := getPersister(*dir, *dbFileName, *appendOnly, *appendDirName, *appendFileName, *appendFsync)
-	err := LoadRDB(p.rdbPath, db)
+	err = LoadRDB(p.rdbPath, db)
 	if err != nil {
 		fmt.Println("Error loading RDB:", err)
 	}
