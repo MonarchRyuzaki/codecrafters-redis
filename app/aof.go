@@ -121,14 +121,13 @@ func (a *AOF) ReadAndRestore() error {
 	// Move cursor to the beginning of the file
 	a.file.Seek(0, 0)
 
-	// Wrap the file in your existing Resp parser
 	respParser := NewResp(a.file)
 
 	for {
 		val, err := respParser.Read()
 		if err != nil {
 			if err == io.EOF {
-				break // Reached end of file
+				break
 			}
 			return err
 		}
@@ -137,7 +136,6 @@ func (a *AOF) ReadAndRestore() error {
 			continue
 		}
 
-		// Re-execute the command to restore state
 		command := val.Array[0].Bulk
 		args := val.Array[1:]
 

@@ -46,8 +46,14 @@ func main() {
 	p := NewPersister(*dir, *dbFileName, *appendOnly, *appendDirName, *appendFileName, *appendFsync)
 	err = LoadRDB(p.rdbPath, db)
 
+	var aof *AOF
 	if p.appendOnly == "yes" {
-		NewAOF()
+		aof, err = NewAOF()
+		if err != nil {
+			fmt.Println("Failed to open AOF:", err)
+		}
+		defer aof.Close()
+		aof.ReadAndRestore()
 	}
 
 	if err != nil {
