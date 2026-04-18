@@ -57,10 +57,7 @@ func NewAOF() (*AOF, error) {
 	if latestNum == 0 {
 		latestNum = 1
 
-		ext := filepath.Ext(p.appendFileName)
-		base := strings.TrimSuffix(p.appendFileName, ext)
-
-		latestIncrFile = fmt.Sprintf("%s.%d.incr%s", base, latestNum, ext)
+		latestIncrFile = fmt.Sprintf("%s.%d.incr.aof", p.appendFileName, latestNum)
 
 		manifestLine := fmt.Sprintf("file %s seq %d type i\n", latestIncrFile, latestNum)
 		if _, err := manifestFile.WriteString(manifestLine); err != nil {
