@@ -36,24 +36,17 @@ func subscribe(cs *ConnState, conn net.Conn, args []Value) Value {
 			cs.subState.subscribedKeys = append(cs.subState.subscribedKeys, key)
 		}
 
-		channelResp := Value{
+		results = append(results, Value{
 			Type: ARRAY,
 			Array: []Value{
 				{Type: BULK, Bulk: "subscribe"},
 				{Type: BULK, Bulk: key},
 				{Type: INTEGER, Num: len(cs.subState.subscribedKeys)},
 			},
-		}
-
-		results = append(results, channelResp)
+		})
 	}
 
-	// NOTE: Redis sends these back as completely separate arrays on the wire (e.g. *3\r\n... *3\r\n...),
-	// NOT as an array of arrays (*2\r\n*3\r\n...).
-	// If your framework just serializes this returned Value literally, you will need to either:
-	// A) Update your main loop to loop through this array and `writer.Write()` each element individually.
-	// B) Pass `writer *Writer` directly into this handler and write them here.
-	return Value{Type: ARRAY, Array: results}
+	return Value{Type: STREAMS, Array: results}
 }
 
 func publish(cs *ConnState, conn net.Conn, args []Value) Value {
@@ -92,7 +85,7 @@ func pingPubSub(cs *ConnState, conn net.Conn, args []Value) Value {
 			},
 		}
 	}
-
+		
 	if len(args) == 0 {
 		return Value{Type: STRING, Str: "PONG"}
 	}
